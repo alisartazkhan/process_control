@@ -1,59 +1,48 @@
 #include "phase1.h"
+#include <stdio.h>
+#include <usloss.h> // Assuming USLOSS functions/types are declared here
 
 // Initialize the Phase 1 kernel
 void phase1_init(void) {
-    // Your code here
+    // Your implementation here
 }
 
 // Create a new process
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
-    // Your code here
+    // Your implementation here
     return 0; // Dummy return
 }
 
 // Wait for a child process to terminate
 int join(int *status) {
-    // Your code here
+    // Your implementation here
     return 0; // Dummy return
 }
 
 // Terminate the current process
 void quit(int status, int switchToPid) {
-    // Your code here
+    // Your implementation here
     // No return as the function has __attribute__((__noreturn__))
 }
 
 // Get the ID of the current process
 int getpid(void) {
-    // Your code here
+    // Your implementation here
     return 0; // Dummy return
 }
 
 // Dump the process information
 void dumpProcesses(void) {
-    // Your code here
+    // Your implementation here
 }
 
 // Start the processes (never returns)
 void startProcesses(void) {
-    // Your code here
+    // Your implementation here
     // This function never returns
 }
 
-#if 1  // ADDED. This is *NOT* part of Phase 1b, but I'm adding it to 1a
+// TEMP_switchTo (Assuming this function is optional)
 void TEMP_switchTo(int pid) {
-    // Your code here
+    // Your implementation here
 }
-#endif
-
-// Functions that will be defined in later phases (Phase 5)
-USLOSS_PTE *phase5_mmu_pageTable_alloc(int pid) {
-    // Your code here (or NOP)
-    return NULL; // Dummy return
-}
-
-void phase5_mmu_pageTable_free(int pid, USLOSS_PTE* pageTable) {
-    // Your code here (or NOP)
-}
-
-// And so on for other functions...
