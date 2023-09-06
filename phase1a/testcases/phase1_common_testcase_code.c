@@ -1,11 +1,7 @@
-
 #include <usloss.h>
 #include <phase1.h>
-
 #include <stdio.h>
 #include <assert.h>
-
-
 
 /* make sure that we don't hit clock interrupts.  The student is not
  * required to implement a clock handler in Phase 1a
