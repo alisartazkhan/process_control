@@ -1,5 +1,6 @@
 #include "phase1.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <usloss.h> // Assuming USLOSS functions/types are declared here
 
 // Initialize the Phase 1 kernel
@@ -23,6 +24,7 @@ int join(int *status) {
 void quit(int status, int switchToPid) {
     // Your implementation here
     // No return as the function has __attribute__((__noreturn__))
+    abort();
 }
 
 // Get the ID of the current process
