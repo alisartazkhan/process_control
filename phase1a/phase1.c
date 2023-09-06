@@ -120,7 +120,20 @@ void startProcesses(void) {
   USLOSS_ContextSwitch(NULL, &proctable[pid].context);
 }
 
-// TEMP_switchTo (Assuming this function is optional)
 void TEMP_switchTo(int pid) {
-    // Your implementation here
+
+  // Disable interrupts
+  int old_psr = USLOSS_PsrGet();
+  USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+
+  // Save context of current process
+  USLOSS_Context current = proctable[running_pid].context;
+  USLOSS_ContextSwitch(&current, NULL);
+
+  // Switch to new process
+  USLOSS_ContextSwitch(NULL, &proctable[pid].context);
+
+  // Restore interrupts
+  USLOSS_PsrSet(old_psr);
+
 }
