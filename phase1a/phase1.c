@@ -7,7 +7,7 @@
 #include <string.h>
 
 
-
+int runningProcessID = 1;
 
 int currentPID = 1;
 
@@ -38,16 +38,17 @@ void phase1_init(void) {
     struct Process init = {.PID = slot, .name = "init", .priority = 6};
     processTable[slot] = init;
 
+    //processTable[slot].startFunc = init;
     //fork1("hello\0",NULL,NULL,10,5);
     //fork1("ihi\0",NULL,NULL,100,3);
 
     fork1("sentinal",NULL,NULL,USLOSS_MIN_STACK,7);
-    fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
-
+    //fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
+    printf("Fork1 called and done running");
     
     
     for (int i = 0; i < MAXPROC; i++){
-        printf("%dth index ID: %d   %s   %d\n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+        printf("%dth index ID: %d   %s   %d   parentid: %d\n",i,processTable[i].PID,processTable[i].name,processTable[i].priority, (processTable[i].parent)->PID);
     }
 
 
@@ -78,6 +79,11 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
     
     processTable[slot] = p;
 
+    int parentID = getpid();
+    printf("Parent ID: %d\n", parentID);
+    //p.parent = &processTable[parentID%MAXPROC];
+    
+
 
 
     //func(arg);
@@ -103,7 +109,7 @@ void quit(int status, int switchToPid) {
 // Get the ID of the current process
 int getpid(void) {
     // Your implementation here
-    return 0; // Dummy return
+    return runningProcessID; // Dummy return
 }
 
 // Dump the process information
