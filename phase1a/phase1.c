@@ -23,11 +23,17 @@ struct Process {
     struct Process* firstChild;
     void * stack;
 
+    int (*startFunc)(char*);
+    char* arg;
+
 };
 
 struct Process processTable[MAXPROC];
 
 int findOpenProcessTableSlot();
+void addChildToParent(struct Process* ,struct Process*);
+void printChildren(struct Process*);
+
 
 
 
@@ -43,12 +49,31 @@ void phase1_init(void) {
     //fork1("ihi\0",NULL,NULL,100,3);
 
     fork1("sentinal",NULL,NULL,USLOSS_MIN_STACK,7);
-    //fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
-    printf("Fork1 called and done running");
+    fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
+    //printf("Fork1 called and done running\n");
+
+    // //runningProcessID = 3;
+    // //fork1("hello",NULL,NULL,USLOSS_MIN_STACK,7);
+
+
     
     
     for (int i = 0; i < MAXPROC; i++){
-        printf("%dth index ID: %d   %s   %d   parentid: %d\n",i,processTable[i].PID,processTable[i].name,processTable[i].priority, (processTable[i].parent)->PID);
+        
+        if (i == 1){
+                    //printChildren(&processTable[i]);
+                    printf("%dth index ID: %d   %s   %d   \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+        }
+
+        if (processTable[i].parent == NULL){
+            continue;
+        }
+
+
+        //printChildren(&processTable[i]);
+        //fflush(stdout);
+        printf("%dth index ID: %d   %s   %d   parentid:%d \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].parent->PID);
+        //fflush(stdout);
     }
 
 
@@ -69,7 +94,7 @@ void phase1_init(void) {
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
 
     int pid = currentPID;
-    struct Process p = {.PID = pid, .priority = priority, .stack = malloc(stacksize)};
+    struct Process p = {.PID = pid, .priority = priority, .stack = malloc(stacksize), .startFunc = func, .arg = arg};
 
     strncpy(p.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
     p.name[MAXNAME - 1] = '\0';
@@ -77,11 +102,14 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
 
     int slot = findOpenProcessTableSlot();
     
-    processTable[slot] = p;
+    
 
-    //int parentID = getpid();
+    int parentID = getpid();
     //printf("Parent ID: %d\n", parentID);
-    //p.parent = &processTable[parentID%MAXPROC];
+    p.parent = &processTable[parentID%MAXPROC];
+    addChildToParent(&p,p.parent);
+    
+    processTable[slot] = p;
     
 
 
@@ -140,5 +168,39 @@ int findOpenProcessTableSlot(){
 
     }
 
+
+}
+
+void addChildToParent(struct Process* newChild ,struct Process* parent){
+    //printf("add child to parent");
+
+    struct Process* curChild = parent->firstChild;
+
+        if (curChild == NULL){
+            parent->firstChild = newChild;
+        }
+        else {
+            newChild->nextSibling = parent->firstChild;
+            parent->firstChild = newChild;
+            printf("%d (P) -> ",parent->PID);
+            printf("%d -> ",parent->firstChild->PID);
+            printf("%d\n",parent->firstChild->nextSibling->PID);
+
+        }
+
+        //printChildren(parent);
+
+
+}
+
+void printChildren(struct Process* parent){
+    struct Process* curChild = parent->firstChild;
+    printf("child list for %d:    ", parent->PID);
+    
+    while (curChild != NULL){
+        printf("%s ",curChild->name);
+        curChild = curChild->nextSibling;
+    }
+    printf("\n");
 
 }
