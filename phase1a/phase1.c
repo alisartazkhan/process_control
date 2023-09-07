@@ -79,8 +79,8 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
     
     processTable[slot] = p;
 
-    int parentID = getpid();
-    printf("Parent ID: %d\n", parentID);
+    //int parentID = getpid();
+    //printf("Parent ID: %d\n", parentID);
     //p.parent = &processTable[parentID%MAXPROC];
     
 
