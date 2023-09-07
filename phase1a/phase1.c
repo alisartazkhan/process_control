@@ -4,6 +4,7 @@
 #include <usloss.h> // Assuming USLOSS functions/types are declared here
 
 #include <stdbool.h>
+#include <string.h>
 
 
 
@@ -11,7 +12,7 @@
 int currentPID = 1;
 
 struct Process {
-    bool isInitialized = false;
+    int isInitialized;
     char name[MAXNAME];
     int PID;
     int priority;
@@ -20,6 +21,7 @@ struct Process {
     struct Process* prevSibiling;
     struct Process* parent;
     struct Process* firstChild;
+    void * stack;
 
 };
 
@@ -28,19 +30,24 @@ struct Process processTable[MAXPROC];
 int findOpenProcessTableSlot();
 
 
+
 // Initialize the Phase 1 kernel
 void phase1_init(void) {
 
-    
     int slot = findOpenProcessTableSlot();
-
-    struct Process init = {.PID = slot, .name = "init"};
+    struct Process init = {.PID = slot, .name = "init", .priority = 6};
     processTable[slot] = init;
 
+    //fork1("hello\0",NULL,NULL,10,5);
+    //fork1("ihi\0",NULL,NULL,100,3);
 
+    fork1("sentinal",NULL,NULL,USLOSS_MIN_STACK,7);
+    fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
+
+    
+    
     for (int i = 0; i < MAXPROC; i++){
-        printf("%dth index ID: %d\n",i,processTable[i].PID);
-        printf("%dth index name: %s\n",i,processTable[i].name);
+        printf("%dth index ID: %d   %s   %d\n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
     }
 
 
@@ -49,8 +56,7 @@ void phase1_init(void) {
 
     //USLOSS_Console("helllooooooooo");
 
-    //fork1(sentinal)
-    //fork1(testcasemain)
+
 
     //while (true) {
 
@@ -61,9 +67,24 @@ void phase1_init(void) {
 // Create a new process
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
 
+    int pid = currentPID;
+    struct Process p = {.PID = pid, .priority = priority, .stack = malloc(stacksize)};
+
+    strncpy(p.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
+    p.name[MAXNAME - 1] = '\0';
+
+
+    int slot = findOpenProcessTableSlot();
+    
+    processTable[slot] = p;
+
+
+
+    //func(arg);
+
 
     // Your implementation here
-    return 0; // Dummy return
+    return pid; // Dummy return
 }
 
 // Wait for a child process to terminate
@@ -103,16 +124,15 @@ void TEMP_switchTo(int pid) {
 
 
 int findOpenProcessTableSlot(){
-    //while (true){
+    while (true){
         int slot = currentPID % MAXPROC;
         currentPID++;
-        return slot; 
 
-        //if (processTable[slot] == "empty"){
+        if (processTable[slot].isInitialized == 0){
+            return slot;
+        }
 
-        //}
-
-    //}
+    }
 
 
 }
