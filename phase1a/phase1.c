@@ -17,6 +17,7 @@ struct Process {
     int PID;
     int priority;
     bool isAlive;
+    USLOSS_Context context;
     struct Process* nextSibling;
     struct Process* prevSibiling;
     struct Process* parent;
@@ -28,25 +29,111 @@ struct Process {
 
 };
 
+// Run queue struct 
+typedef struct Queue {
+  int head;
+  int tail;
+  int count;
+} Queue;
+
+
 struct Process processTable[MAXPROC];
 
 int findOpenProcessTableSlot();
 void addChildToParent(struct Process* ,struct Process*);
 void printChildren(struct Process*);
+void initQueue(Queue*);
+void addToRunQueue(int, Queue*);
 
 
+// Initialize queue 
+void initQueue(Queue* q) {
+  q->head = 0;
+  q->tail = 0;
+  q->count = 0;
+}
 
+
+// Add process to run queue
+void addToRunQueue(int pid, Queue* q) {
+  
+  // Set links
+  proctable[pid].next = NULL;
+  proctable[pid].prev = NULL;
+
+  if (q->count == 0) {
+    // Queue empty
+    q->head = pid;
+    q->tail = pid;
+  } else {
+    // Add to tail
+    proctable[q->tail].next = pid;
+    proctable[pid].prev = q->tail;
+    q->tail = pid;
+  }
+
+  // Increment count
+  q->count++;
+
+}
+
+int createProcess(char *name, void *startFunc, void *arg, int priority, int stackSize) {
+  
+    // Disable interrupts  
+    int old_psr = USLOSS_PsrGet();
+    USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+
+    int slot = findOpenProcessTableSlot();
+    struct Process init = {.PID = slot, .name = "init", .priority = 6, .stack = malloc(USLOSS_MIN_STACK)};
+    processTable[slot] = init;
+
+    if (slot == -1) { // IMPLEMENT 
+        return -1; 
+    }
+
+  // Initialize process attributes
+  strcpy(proctable[pid].name, name);
+  proctable[pid].priority = priority;
+  proctable[pid].status = CREATED;
+
+  // Allocate stack
+  proctable[pid].stack = malloc(stackSize);
+
+  // Initialize context
+  USLOSS_ContextInit(&proctable[pid].context, proctable[pid].stack, 
+                     stackSize, startFunc);
+
+  // Restore interrupts
+  USLOSS_PsrSet(old_psr);
+
+  return pid;
+}
 
 // Initialize the Phase 1 kernel
 void phase1_init(void) {
 
+    int old_psr = USLOSS_PsrGet();
+    USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+
+    for (int i = 0; i < NUM_PRIORITIES; i++) {
+    initQueue(&runQueues[i]);
+    }
+
     int slot = findOpenProcessTableSlot();
-    struct Process init = {.PID = slot, .name = "init", .priority = 6};
+    struct Process init = {.PID = slot, .name = "init", .priority = 6, .stack = malloc(USLOSS_MIN_STACK)};
     processTable[slot] = init;
+    USLOSS_ContextInit(&init->context, init->stack, USLOSS_MIN_STACK, NULL);
+
+
+
+
 
     //processTable[slot].startFunc = init;
     //fork1("hello\0",NULL,NULL,10,5);
     //fork1("ihi\0",NULL,NULL,100,3);
+
+
+
 
     fork1("sentinal",NULL,NULL,USLOSS_MIN_STACK,7);
     fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
@@ -61,8 +148,8 @@ void phase1_init(void) {
     for (int i = 0; i < MAXPROC; i++){
         
         if (i == 1){
-                    //printChildren(&processTable[i]);
-                    printf("%dth index ID: %d   %s   %d   \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+            //printChildren(&processTable[i]);
+            printf("%dth index ID: %d   %s   %d   \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
         }
 
         if (processTable[i].parent == NULL){
@@ -75,29 +162,16 @@ void phase1_init(void) {
         printf("%dth index ID: %d   %s   %d   parentid:%d \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].parent->PID);
         //fflush(stdout);
     }
-
-
-    // Your implementation here
-
-
-    //USLOSS_Console("helllooooooooo");
-
-
-
-    //while (true) {
-
-//        join()
-//   }
 }
 
 // Create a new process
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
 
     int pid = currentPID;
-    struct Process p = {.PID = pid, .priority = priority, .stack = malloc(stacksize), .startFunc = func, .arg = arg};
+    struct Process child = {.PID = pid, .priority = priority, .stack = malloc(stacksize), .startFunc = func, .arg = arg};
 
-    strncpy(p.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
-    p.name[MAXNAME - 1] = '\0';
+    strncpy(child.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
+    child.name[MAXNAME - 1] = '\0';
 
 
     int slot = findOpenProcessTableSlot();
@@ -106,10 +180,10 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
 
     int parentID = getpid();
     //printf("Parent ID: %d\n", parentID);
-    p.parent = &processTable[parentID%MAXPROC];
-    addChildToParent(&p,p.parent);
+    child.parent = &processTable[parentID%MAXPROC];
+    addChildToParent(&child, child.parent);
     
-    processTable[slot] = p;
+    processTable[slot] = child;
     
 
 
@@ -171,36 +245,31 @@ int findOpenProcessTableSlot(){
 
 }
 
-void addChildToParent(struct Process* newChild ,struct Process* parent){
-    //printf("add child to parent");
-
-    struct Process* curChild = parent->firstChild;
-
-        if (curChild == NULL){
-            parent->firstChild = newChild;
-        }
-        else {
-            newChild->nextSibling = parent->firstChild;
-            parent->firstChild = newChild;
-            printf("%d (P) -> ",parent->PID);
-            printf("%d -> ",parent->firstChild->PID);
-            printf("%d\n",parent->firstChild->nextSibling->PID);
-
-        }
-
-        //printChildren(parent);
-
-
-}
-
-void printChildren(struct Process* parent){
-    struct Process* curChild = parent->firstChild;
-    printf("child list for %d:    ", parent->PID);
-    
-    while (curChild != NULL){
-        printf("%s ",curChild->name);
-        curChild = curChild->nextSibling;
+void addChildToParent(struct Process* newChild, struct Process* parent) {
+    if (parent->firstChild == NULL) {
+        parent->firstChild = newChild;
+        newChild->nextSibling = NULL; // no next sibling
+    } else {
+        newChild->nextSibling = &(parent->firstChild);
+        parent->firstChild = newChild;
+        
+        // Debug prints (modify accordingly)
+        printf("%d (P) -> ", parent->PID);
+        printf("%d -> ", parent->firstChild->PID);
+        printf("%d\n", newChild->nextSibling->PID);
+        
     }
-    printf("\n");
-
 }
+
+
+// void printChildren(struct Process* parent){
+//     struct Process* curChild = parent->firstChild;
+//     printf("child list for %d:    ", parent->PID);
+    
+//     while (curChild != NULL){
+//         printf("%s ",curChild->name);
+//         curChild = curChild->nextSibling;
+//     }
+//     printf("\n");
+
+// }
