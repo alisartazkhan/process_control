@@ -41,22 +41,14 @@ void printChildren(struct Process*);
 void phase1_init(void) {
 
     int slot = findOpenProcessTableSlot();
-    struct Process init = {.PID = slot, .name = "init", .priority = 6};
+    struct Process init = {.PID = slot, .name = "init", .priority = 6, .isInitialized = 1};
     processTable[slot] = init;
 
-    //processTable[slot].startFunc = init;
-    //fork1("hello\0",NULL,NULL,10,5);
-    //fork1("ihi\0",NULL,NULL,100,3);
 
-    fork1("sentinal",NULL,NULL,USLOSS_MIN_STACK,7);
-    fork1("testcasemain",NULL,NULL,USLOSS_MIN_STACK,3);
-    //printf("Fork1 called and done running\n");
+    fork1("1st child",NULL,NULL,USLOSS_MIN_STACK,7);
+    fork1("2nd child",NULL,NULL,USLOSS_MIN_STACK,3);
+    fork1("3nd child",NULL,NULL,USLOSS_MIN_STACK,3);
 
-    // //runningProcessID = 3;
-    // //fork1("hello",NULL,NULL,USLOSS_MIN_STACK,7);
-
-
-    
     
     for (int i = 0; i < MAXPROC; i++){
         
@@ -90,34 +82,65 @@ void phase1_init(void) {
 //   }
 }
 
+void addChildToParent(struct Process* newChild ,struct Process* parent){
+    //printf("add child to parent");
+
+    printf("In C2P: parent: %p, child: %p\n", &parent, &newChild);
+
+    if (parent->firstChild == NULL){
+        parent->firstChild = newChild;
+        printf("%s [first child]\n ",parent->firstChild->name);
+
+    }
+    else {
+        printf("%s [first child] before\n",parent->firstChild->name);
+        newChild->nextSibling = parent->firstChild;
+        printf("%s [old first child] after\n",newChild->nextSibling->name);
+
+        parent->firstChild = newChild;
+
+        printf("%d (P) -> ",parent->PID);
+        printf("%d -> ",parent->firstChild->PID);
+        printf("%d\n",parent->firstChild->nextSibling->PID);
+        printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
+    }
+}
 // Create a new process
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
 
     int pid = currentPID;
-    struct Process p = {.PID = pid, .priority = priority, .stack = malloc(stacksize), .startFunc = func, .arg = arg};
-
-    strncpy(p.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
-    p.name[MAXNAME - 1] = '\0';
-
-
-    int slot = findOpenProcessTableSlot();
-    
+    struct Process child = {.PID = pid, .priority = priority, .stack = malloc(USLOSS_MIN_STACK), .startFunc = func, .arg = arg, .isInitialized = 1};
+    strncpy(child.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
+    child.name[MAXNAME - 1] = '\0';
     
 
+    int newChildSlot = findOpenProcessTableSlot();
+    processTable[newChildSlot] = child;
     int parentID = getpid();
-    //printf("Parent ID: %d\n", parentID);
-    p.parent = &processTable[parentID%MAXPROC];
-    addChildToParent(&p,p.parent);
+    child.parent = &processTable[parentID%MAXPROC];
+
+    struct Process* parent = &processTable[parentID%MAXPROC];
+    struct Process* newChild = &processTable[newChildSlot%MAXPROC];
+    printf("----------------%d\n", newChild->PID);
+
+    if (parent->firstChild == NULL){
+        parent->firstChild = newChild;
+        printf("%s [first child] inside if statement\n ",parent->firstChild->name);
+
+    } else {
+        printf("%s [first child] before\n",parent->firstChild->name);
+        newChild->nextSibling = parent->firstChild;
+        printf("%s [old first child] after\n",newChild->nextSibling->name);
+        parent->firstChild = newChild;
+
+        printf("%s (P) -> ",parent->name);
+        printf("%s -> ",parent->firstChild->name);
+        printf("%s\n",parent->firstChild->nextSibling->name);
+        printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
+    }
+
     
-    processTable[slot] = p;
-    
 
-
-
-    //func(arg);
-
-
-    // Your implementation here
     return pid; // Dummy return
 }
 
@@ -171,27 +194,7 @@ int findOpenProcessTableSlot(){
 
 }
 
-void addChildToParent(struct Process* newChild ,struct Process* parent){
-    //printf("add child to parent");
 
-    struct Process* curChild = parent->firstChild;
-
-        if (curChild == NULL){
-            parent->firstChild = newChild;
-        }
-        else {
-            newChild->nextSibling = parent->firstChild;
-            parent->firstChild = newChild;
-            printf("%d (P) -> ",parent->PID);
-            printf("%d -> ",parent->firstChild->PID);
-            printf("%d\n",parent->firstChild->nextSibling->PID);
-
-        }
-
-        //printChildren(parent);
-
-
-}
 
 void printChildren(struct Process* parent){
     struct Process* curChild = parent->firstChild;
