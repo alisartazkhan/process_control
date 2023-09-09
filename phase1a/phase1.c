@@ -8,8 +8,7 @@
 
 
 int runningProcessID = 1;
-
-int currentPID = 1;
+int pidCounter = 1;
 
 struct Process {
     int isInitialized;
@@ -17,128 +16,165 @@ struct Process {
     int PID;
     int priority;
     bool isAlive;
+    USLOSS_Context context;
     struct Process* nextSibling;
-    struct Process* prevSibiling;
+    struct Process* prevSibling;
     struct Process* parent;
     struct Process* firstChild;
     void * stack;
-
+    int returnStatus;
     int (*startFunc)(char*);
     char* arg;
 
 };
 
-struct Process processTable[MAXPROC];
+// Run queue struct 
+typedef struct Queue {
+  int head;
+  int tail;
+  int count;
+} Queue;
+
+
+struct Process processTable[10];
+struct Process* runQueues[5]; // NUM_PRIORITIES = 5
 
 int findOpenProcessTableSlot();
 void addChildToParent(struct Process* ,struct Process*);
 void printChildren(struct Process*);
+void initQueue(Queue*);
+void addToRunQueue(int, Queue*);
 void printTable();
 
+// Initialize queue 
+void initQueue(Queue* q) {
+  q->head = 0;
+  q->tail = 0;
+  q->count = 0;
+}
+
+// Add process to run queue
+void addToRunQueue(int pid, Queue* q) {
+  
+//   // Set links
+//   proctable[pid].next = NULL;
+//   proctable[pid].prev = NULL;
+
+//   if (q->count == 0) {
+//     // Queue empty
+//     q->head = pid;
+//     q->tail = pid;
+//   } else {
+//     // Add to tail
+//     proctable[q->tail].next = pid;
+//     proctable[pid].prev = q->tail;
+//     q->tail = pid;
+//   }
+
+//   q->count++;
+
+}
+
+int createProcess(char *name, void *startFunc, void *arg, int stackSize, int priority) {
+  
+    // Disable interrupts  
+    int old_psr = USLOSS_PsrGet();
+    USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+
+    int slot = findOpenProcessTableSlot();
+    USLOSS_Console("SLOT: %d\n", slot);
+    if (slot == -1) { // IMPLEMENT 
+        return -1; 
+    }
+
+    struct Process p = {.PID = pidCounter-1, .priority = priority, .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg};
+    processTable[slot] = p;
+    strcpy(processTable[slot].name, name);
+    processTable[slot].name[MAXNAME - 1] = '\0';
 
 
+    // Initialize context
+    USLOSS_ContextInit(&processTable[slot].context, processTable[slot].stack, stackSize, NULL, startFunc);
+
+    // Restore interrupts
+    USLOSS_PsrSet(old_psr);
+
+    return pidCounter-1;
+}
+
+// void testcase_main(){
+//     int i = 0;
+//     while (i<100){i++;}
+//     USLOSS_Console("testcase_main() running...\n");
+// }
+
+// void sentinel(){
+//     int i = 0;
+//     while (i<100){i++;}
+//     USLOSS_Console("sentinel running...\n");
+// }
 
 // Initialize the Phase 1 kernel
 void phase1_init(void) {
 
-    int slot = findOpenProcessTableSlot();
-    struct Process init = {.PID = slot, .name = "init", .priority = 6, .isInitialized = 1};
-    processTable[slot] = init;
+    // int slot = findOpenProcessTableSlot();
+    // struct Process init = {.PID = slot, .name = "init", .priority = 6, .isInitialized = 1};
+    // processTable[slot] = init;
 
-
-    fork1("1st child",NULL,NULL,USLOSS_MIN_STACK,7);
-    fork1("2nd child",NULL,NULL,USLOSS_MIN_STACK,3);
-    fork1("3nd child",NULL,NULL,USLOSS_MIN_STACK,3);
-
-    runningProcessID = 3;
-    fork1("4th child",NULL,NULL,USLOSS_MIN_STACK,3);
-    fork1("5th child",NULL,NULL,USLOSS_MIN_STACK,3);
-
-    runningProcessID = 4;
-    fork1("6th child",NULL,NULL,USLOSS_MIN_STACK,3);
-    fork1("7th child",NULL,NULL,USLOSS_MIN_STACK,3);
-
-
-
-
+    createProcess("init", NULL, NULL, USLOSS_MIN_STACK, 6);
     
+
+    fork1("sentinel", NULL, NULL,USLOSS_MIN_STACK,7);
+
+    //fork1("sentinel", NULL, NULL,USLOSS_MIN_STACK,7);
+    fork1("testcase_main", NULL, NULL,USLOSS_MIN_STACK,3);
+
+    // USLOSS_ContextSwitch(NULL, &processTable[1].context);
+
+    // // Initialize run queues
+    // for (int i = 0; i < NUM_PRIORITIES; i++) {
+        
+    //     //initQueue(runQueues[i]); 
+    // }
+
+
+    // fork1("1st child",NULL,NULL,USLOSS_MIN_STACK,7);
+    // fork1("2nd child",NULL,NULL,USLOSS_MIN_STACK,3);
+    // fork1("3rd child",NULL,NULL,USLOSS_MIN_STACK,3);
+
+    // runningProcessID = 3;
+    // fork1("4th child",NULL,NULL,USLOSS_MIN_STACK,3);
+    // fork1("5th child",NULL,NULL,USLOSS_MIN_STACK,3);
+
+    // runningProcessID = 4;
+    // fork1("6th child",NULL,NULL,USLOSS_MIN_STACK,3);
+    // fork1("7th child",NULL,NULL,USLOSS_MIN_STACK,3);
+
     printTable();
-
-
-    // Your implementation here
-
-
-    //USLOSS_Console("helllooooooooo");
-
-
-
-    //while (true) {
-
-//        join()
-//   }
+    
 }
 
-void addChildToParent(struct Process* newChild ,struct Process* parent){
-    //printf("add child to parent");
-
-    //printf("In C2P: parent: %p, child: %p\n", &parent, &newChild);
-
-    if (parent->firstChild == NULL){
-        parent->firstChild = newChild;
-        //printf("%s [first child]\n ",parent->firstChild->name);
-
-    }
-    else {
-        //printf("%s [first child] before\n",parent->firstChild->name);
-        newChild->nextSibling = parent->firstChild;
-        //printf("%s [old first child] after\n",newChild->nextSibling->name);
-
-        parent->firstChild = newChild;
-
-        //printf("%d (P) -> ",parent->PID);
-        //printf("%d -> ",parent->firstChild->PID);
-        //printf("%d\n",parent->firstChild->nextSibling->PID);
-        //printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
-    }
-}
 // Create a new process
 int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
 
-    int pid = currentPID;
-    struct Process child = {.PID = pid, .priority = priority, .stack = malloc(USLOSS_MIN_STACK), .startFunc = func, .arg = arg, .isInitialized = 1};
-    strncpy(child.name, name, MAXNAME); // Copy the name into the name field and ensure it's null-terminated
-    child.name[MAXNAME - 1] = '\0';
-    
+    int pid = createProcess(name, func, arg, stacksize, priority);
 
-    int newChildSlot = findOpenProcessTableSlot();
+    int newChildSlot = pid % MAXPROC;
     int parentID = getpid();
-    child.parent = &processTable[parentID%MAXPROC];
 
-
-    processTable[newChildSlot] = child;
-
-    struct Process* parent = &processTable[parentID%MAXPROC];
-    struct Process* newChild = &processTable[newChildSlot%MAXPROC];
-    //printf("----------------%d\n", newChild->PID);
+    struct Process* newChild = &processTable[newChildSlot]; // accessing new child from the array
+    newChild->parent = &processTable[parentID%MAXPROC]; // setting the parent in the child struct
+    struct Process* parent = &processTable[parentID%MAXPROC]; // accessing parent struct from the array
+    USLOSS_Console("parentID: %d,newChildID: %d\n",parent->PID, newChild->PID);
+    //printTable();
 
     if (parent->firstChild == NULL){
         parent->firstChild = newChild;
-        //printf("%s [first child] inside if statement\n ",parent->firstChild->name);
-
     } else {
-        //printf("%s [first child] before\n",parent->firstChild->name);
+        parent -> firstChild -> prevSibling = newChild;
         newChild->nextSibling = parent->firstChild;
-        //printf("%s [old first child] after\n",newChild->nextSibling->name);
         parent->firstChild = newChild;
-
-        //printf("%s (P) -> ",parent->name);
-        //printf("%s -> ",parent->firstChild->name);
-        //printf("%s\n",parent->firstChild->nextSibling->name);
-        //printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
     }
-
-    
-
     return pid; // Dummy return
 }
 
@@ -180,8 +216,8 @@ void TEMP_switchTo(int pid) {
 
 int findOpenProcessTableSlot(){
     while (true){
-        int slot = currentPID % MAXPROC;
-        currentPID++;
+        int slot = pidCounter % MAXPROC;
+        pidCounter++;
 
         if (processTable[slot].isInitialized == 0){
             return slot;
@@ -196,29 +232,25 @@ int findOpenProcessTableSlot(){
 
 void printChildren(struct Process* parent){
     struct Process* curChild = parent->firstChild;
-    printf("child list for %d:    ", parent->PID);
+    USLOSS_Console("child list for %d: ", parent->PID);
     
     while (curChild != NULL){
-        printf("%s ",curChild->name);
+        USLOSS_Console("%s -> ",curChild->name);
         curChild = curChild->nextSibling;
     }
-    printf("\n");
+    USLOSS_Console("NULL\n");
 
 }
 
 void printTable(){
-
-    for (int i = 0; i < MAXPROC; i++){
-
+    for (int i = 0; i < 10; i++){
         if (processTable[i].PID == 0){
+            USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
             continue;
         }
-
-
-        //fflush(stdout);
-        printf("%d: PID: %d | NAME: %s | PRIORITY: %d | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+        USLOSS_Console("%d: PID: %d | NAME: %s | PRIORITY: %d | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
         printChildren(&processTable[i]);
-
-        //fflush(stdout);
     }
+    USLOSS_Console("-------------------------------------\n \n");
+
 }
