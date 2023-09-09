@@ -33,6 +33,7 @@ struct Process processTable[MAXPROC];
 int findOpenProcessTableSlot();
 void addChildToParent(struct Process* ,struct Process*);
 void printChildren(struct Process*);
+void printTable();
 
 
 
@@ -49,24 +50,19 @@ void phase1_init(void) {
     fork1("2nd child",NULL,NULL,USLOSS_MIN_STACK,3);
     fork1("3nd child",NULL,NULL,USLOSS_MIN_STACK,3);
 
+    runningProcessID = 3;
+    fork1("4th child",NULL,NULL,USLOSS_MIN_STACK,3);
+    fork1("5th child",NULL,NULL,USLOSS_MIN_STACK,3);
+
+    runningProcessID = 4;
+    fork1("6th child",NULL,NULL,USLOSS_MIN_STACK,3);
+    fork1("7th child",NULL,NULL,USLOSS_MIN_STACK,3);
+
+
+
+
     
-    for (int i = 0; i < MAXPROC; i++){
-        
-        if (i == 1){
-                    //printChildren(&processTable[i]);
-                    printf("%dth index ID: %d   %s   %d   \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
-        }
-
-        if (processTable[i].parent == NULL){
-            continue;
-        }
-
-
-        //printChildren(&processTable[i]);
-        //fflush(stdout);
-        printf("%dth index ID: %d   %s   %d   parentid:%d \n",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].parent->PID);
-        //fflush(stdout);
-    }
+    printTable();
 
 
     // Your implementation here
@@ -85,24 +81,24 @@ void phase1_init(void) {
 void addChildToParent(struct Process* newChild ,struct Process* parent){
     //printf("add child to parent");
 
-    printf("In C2P: parent: %p, child: %p\n", &parent, &newChild);
+    //printf("In C2P: parent: %p, child: %p\n", &parent, &newChild);
 
     if (parent->firstChild == NULL){
         parent->firstChild = newChild;
-        printf("%s [first child]\n ",parent->firstChild->name);
+        //printf("%s [first child]\n ",parent->firstChild->name);
 
     }
     else {
-        printf("%s [first child] before\n",parent->firstChild->name);
+        //printf("%s [first child] before\n",parent->firstChild->name);
         newChild->nextSibling = parent->firstChild;
-        printf("%s [old first child] after\n",newChild->nextSibling->name);
+        //printf("%s [old first child] after\n",newChild->nextSibling->name);
 
         parent->firstChild = newChild;
 
-        printf("%d (P) -> ",parent->PID);
-        printf("%d -> ",parent->firstChild->PID);
-        printf("%d\n",parent->firstChild->nextSibling->PID);
-        printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
+        //printf("%d (P) -> ",parent->PID);
+        //printf("%d -> ",parent->firstChild->PID);
+        //printf("%d\n",parent->firstChild->nextSibling->PID);
+        //printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
     }
 }
 // Create a new process
@@ -115,28 +111,30 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
     
 
     int newChildSlot = findOpenProcessTableSlot();
-    processTable[newChildSlot] = child;
     int parentID = getpid();
     child.parent = &processTable[parentID%MAXPROC];
 
+
+    processTable[newChildSlot] = child;
+
     struct Process* parent = &processTable[parentID%MAXPROC];
     struct Process* newChild = &processTable[newChildSlot%MAXPROC];
-    printf("----------------%d\n", newChild->PID);
+    //printf("----------------%d\n", newChild->PID);
 
     if (parent->firstChild == NULL){
         parent->firstChild = newChild;
-        printf("%s [first child] inside if statement\n ",parent->firstChild->name);
+        //printf("%s [first child] inside if statement\n ",parent->firstChild->name);
 
     } else {
-        printf("%s [first child] before\n",parent->firstChild->name);
+        //printf("%s [first child] before\n",parent->firstChild->name);
         newChild->nextSibling = parent->firstChild;
-        printf("%s [old first child] after\n",newChild->nextSibling->name);
+        //printf("%s [old first child] after\n",newChild->nextSibling->name);
         parent->firstChild = newChild;
 
-        printf("%s (P) -> ",parent->name);
-        printf("%s -> ",parent->firstChild->name);
-        printf("%s\n",parent->firstChild->nextSibling->name);
-        printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
+        //printf("%s (P) -> ",parent->name);
+        //printf("%s -> ",parent->firstChild->name);
+        //printf("%s\n",parent->firstChild->nextSibling->name);
+        //printf("In C2P: parent: %p, child: %p, sibling: %p\n", &parent, &(parent->firstChild), &(parent->firstChild->nextSibling));
     }
 
     
@@ -206,4 +204,21 @@ void printChildren(struct Process* parent){
     }
     printf("\n");
 
+}
+
+void printTable(){
+
+    for (int i = 0; i < MAXPROC; i++){
+
+        if (processTable[i].PID == 0){
+            continue;
+        }
+
+
+        //fflush(stdout);
+        printf("%d: PID: %d | NAME: %s | PRIORITY: %d | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+        printChildren(&processTable[i]);
+
+        //fflush(stdout);
+    }
 }
