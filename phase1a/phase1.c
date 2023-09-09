@@ -82,7 +82,7 @@ int createProcess(char *name, void *startFunc, void *arg, int stackSize, int pri
     USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
 
     int slot = findOpenProcessTableSlot();
-    printf("SLOT: %d\n", slot);
+    USLOSS_Console("SLOT: %d\n", slot);
     if (slot == -1) { // IMPLEMENT 
         return -1; 
     }
@@ -105,13 +105,13 @@ int createProcess(char *name, void *startFunc, void *arg, int stackSize, int pri
 // void testcase_main(){
 //     int i = 0;
 //     while (i<100){i++;}
-//     printf("testcase_main() running...\n");
+//     USLOSS_Console("testcase_main() running...\n");
 // }
 
 // void sentinel(){
 //     int i = 0;
 //     while (i<100){i++;}
-//     printf("sentinel running...\n");
+//     USLOSS_Console("sentinel running...\n");
 // }
 
 // Initialize the Phase 1 kernel
@@ -165,7 +165,7 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
     struct Process* newChild = &processTable[newChildSlot]; // accessing new child from the array
     newChild->parent = &processTable[parentID%MAXPROC]; // setting the parent in the child struct
     struct Process* parent = &processTable[parentID%MAXPROC]; // accessing parent struct from the array
-    printf("parentID: %d,newChildID: %d\n",parent->PID, newChild->PID);
+    USLOSS_Console("parentID: %d,newChildID: %d\n",parent->PID, newChild->PID);
     //printTable();
 
     if (parent->firstChild == NULL){
@@ -232,25 +232,25 @@ int findOpenProcessTableSlot(){
 
 void printChildren(struct Process* parent){
     struct Process* curChild = parent->firstChild;
-    printf("child list for %d: ", parent->PID);
+    USLOSS_Console("child list for %d: ", parent->PID);
     
     while (curChild != NULL){
-        printf("%s -> ",curChild->name);
+        USLOSS_Console("%s -> ",curChild->name);
         curChild = curChild->nextSibling;
     }
-    printf("NULL\n");
+    USLOSS_Console("NULL\n");
 
 }
 
 void printTable(){
     for (int i = 0; i < 10; i++){
         if (processTable[i].PID == 0){
-            printf("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
+            USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
             continue;
         }
-        printf("%d: PID: %d | NAME: %s | PRIORITY: %d | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
+        USLOSS_Console("%d: PID: %d | NAME: %s | PRIORITY: %d | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority);
         printChildren(&processTable[i]);
     }
-    printf("-------------------------------------\n \n");
+    USLOSS_Console("-------------------------------------\n \n");
 
 }
