@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <usloss.h> // Assuming USLOSS functions/types are declared here
-
 #include <stdbool.h>
 #include <string.h>
 
@@ -76,7 +75,6 @@ void addToRunQueue(int pid, Queue* q) {
 }
 
 int createProcess(char *name, void *startFunc, void *arg, int stackSize, int priority) {
-  
     // Disable interrupts  
     int old_psr = USLOSS_PsrGet();
     USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
@@ -94,9 +92,7 @@ int createProcess(char *name, void *startFunc, void *arg, int stackSize, int pri
 
 
     // Initialize context
-    // USLOSS_Console("address of %i before INIT: %p\n", slot,(processTable[slot].context) );
     USLOSS_ContextInit(&(processTable[slot].context), processTable[slot].stack, stackSize, NULL, startFunc);
-    // USLOSS_Console("address of %i after INIT: %p\n", slot,(processTable[slot].context ));
 
     // Restore interrupts
     USLOSS_PsrSet(old_psr);
@@ -127,7 +123,6 @@ int testcase_main2(char *arg){
     USLOSS_ContextSwitch(&(processTable[3].context), &(processTable[2].context));
 
     USLOSS_Halt(0);
-
     return 6;
 }
 
@@ -147,15 +142,7 @@ int sentinel(char *arg){
 // Initialize the Phase 1 kernel
 void phase1_init(void) {
 
-    // int slot = findOpenProcessTableSlot();
-    // struct Process init = {.PID = slot, .name = "init", .priority = 6, .isInitialized = 1};
-    // processTable[slot] = init;
-
     createProcess("init", init_main, NULL, USLOSS_MIN_STACK, 6);
-    
-
-    // fork1("sentinel", NULL, NULL,USLOSS_MIN_STACK,7);
-
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main2, NULL,USLOSS_MIN_STACK,3);
 
