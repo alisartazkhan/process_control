@@ -21,7 +21,9 @@ struct Process {
     struct Process* parent;
     struct Process* firstChild;
     void * stack;
-    int returnStatus;
+    int status;
+    bool isBlocked;
+    bool isZombie;
     int (*startFunc)(char*);
     char* arg;
 
@@ -85,7 +87,7 @@ int createProcess(char *name, void *startFunc, void *arg, int stackSize, int pri
         return -1; 
     }
 
-    struct Process p = {.PID = pidCounter-1, .priority = priority, .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg};
+    struct Process p = {.PID = pidCounter-1, .priority = priority, .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg, .isInitialized = 1};
     processTable[slot] = p;
     strcpy(processTable[slot].name, name);
     processTable[slot].name[MAXNAME - 1] = '\0';
@@ -107,6 +109,7 @@ int init_main(char *arg){
         USLOSS_Console("init_main() running...\n");
         i++;}
     USLOSS_Console("init_main() DONE.\n");
+
     USLOSS_ContextSwitch(&(processTable[1].context), &(processTable[2].context));
 
     USLOSS_Halt(0);
@@ -143,10 +146,10 @@ int sentinel(char *arg){
 void phase1_init(void) {
 
     createProcess("init", init_main, NULL, USLOSS_MIN_STACK, 6);
+
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main2, NULL,USLOSS_MIN_STACK,3);
 
-    USLOSS_ContextSwitch(NULL, &(processTable[1].context));
 
 
     // // Initialize run queues
@@ -202,11 +205,21 @@ int join(int *status) {
     return 0; // Dummy return
 }
 
+
 // Terminate the current process
 void quit(int status, int switchToPid) {
-    // Your implementation here
-    // No return as the function has __attribute__((__noreturn__))
-    abort();
+    int curPid = runningProcessID;
+
+    struct Process* curProcess = &processTable[curPid % MAXPROC];
+    struct Process* switchToProcess = &processTable[switchToPid % MAXPROC];
+
+    curProcess->status = status;
+
+    // Assuming 'stack' is a pointer field in the struct, to be freed.
+    free(curProcess->stack);
+
+    USLOSS_ContextSwitch(NULL, &(processTable[switchToPid % MAXPROC].context));
+
 }
 
 // Get the ID of the current process
@@ -222,33 +235,30 @@ void dumpProcesses(void) {
 
 // Start the processes (never returns)
 void startProcesses(void) {
-    // Your implementation here
-    // USLOSS_ContextSwitch(NULL, &(processTable[1].context));
-    // printTable();
 
+    USLOSS_ContextSwitch(NULL, &(processTable[1].context));
 
 }
 
 // TEMP_switchTo (Assuming this function is optional)
 void TEMP_switchTo(int pid) {
-    // Your implementation here
+    
 }
 
 
 int findOpenProcessTableSlot(){
-    while (true){
+    // MAXPROC
+    int i = 0;
+    while (i<10){
         int slot = pidCounter % MAXPROC;
         pidCounter++;
-
         if (processTable[slot].isInitialized == 0){
-            return slot;
-        }
-
+            return slot;}
+        i++;
     }
 
-
+    return -1;
 }
-
 
 
 void printChildren(struct Process* parent){
