@@ -7,11 +7,12 @@
 
 
 
-int testcase_main()
+int testcase_main(void)
 {
-    phase1_init();
-    USLOSS_Trace("Testing\n");
-    return 0;
-}
+    int i = 0;
+    while (i<100){i++;}
+    USLOSS_Console("testcase_main() running...\n");
+    return 6;
+ }
 
 
