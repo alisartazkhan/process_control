@@ -241,7 +241,7 @@ void quit(int status, int switchToPid) {
 
     printf("Stack pointer for pid %d is %p\n", runningProcessID, stackPtr);
 
-    free((*curProcess).stack);
+    free(curProcess->stack); //CAUSES SEG FAULT!!!!!!
     printf("BEFORE NEW PROC\n");
 
     struct Process* newProcess = getProcess(switchToPid);
