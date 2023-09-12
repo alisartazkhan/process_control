@@ -11,7 +11,7 @@
  * Maximum number of processes. 
  */
 
-#define MAXPROC      10
+#define MAXPROC      50
 
 /*
  * Maximum length of a process name

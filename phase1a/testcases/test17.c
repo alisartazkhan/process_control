@@ -44,6 +44,8 @@ int testcase_main()
     ret3 = join(&status);
     USLOSS_Console("testcase_main: joined with child %d\n", ret3);
 
+    dumpProcesses();
+
     return 0;
 }
 

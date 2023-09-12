@@ -53,7 +53,12 @@ int createProcess(char *name, int (*startFunc)(char*), void *arg, int stackSize,
         return -1; 
     }
 
-    struct Process p = {.PID = pidCounter-1, .priority = priority, .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg, .isInitialized = 1, .state = "READY", .nextSibling = NULL, .prevSibling = NULL };
+    struct Process p = {.PID = pidCounter-1, .priority = priority, .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg, .isInitialized = 1, .state = "Runnable", .nextSibling = NULL, .prevSibling = NULL };
+
+    if (p.stack != NULL){
+    //printf("Malloc in created process is correct\n");
+    }
+
     processTable[slot] = p;
     strcpy(processTable[slot].name, name);
     processTable[slot].name[MAXNAME - 1] = '\0';
@@ -76,6 +81,7 @@ int init_main(char *arg){
     //     i++;}
     // USLOSS_Console("init_main() DONE.\n");
     //USLOSS_ContextSwitch(&processTable[1].context, &(processTable[2].context));
+    USLOSS_Console("Phase 1A TEMPORARY HACK: init() manually switching to testcase_main() after using fork1() to create it.\n");
 
     TEMP_switchTo(3);
 
@@ -98,7 +104,14 @@ int sentinel(char *arg){
 }
 
 
-
+void testcase_main_local(){
+    int retVal = testcase_main();
+    USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, simulation will now halt.\n");
+    if(retVal != 0){
+        printf("ERROR MESSAGE");
+    }
+    USLOSS_Halt(retVal);
+}
 
 
 
@@ -107,8 +120,10 @@ void phase1_init(void) {
 
     createProcess("init", init_main, NULL, USLOSS_MIN_STACK, 6);
 
+    
+
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
-    fork1("testcase_main", testcase_main, NULL,USLOSS_MIN_STACK,3);
+    fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
 }
 
 void trampoline(void){
@@ -122,19 +137,13 @@ void trampoline(void){
     int status = curProcess->startFunc(curProcess->arg);
     printf("FINISHED RUNNING CHILD MAIN\n");
 
-    quit(status, curProcess->parent->PID);
+    //quit(status, curProcess->parent->PID);
 }
 
 struct Process* getProcess(int pid) {
 
-    for (int i = 0; i< MAXPROC; i++){
-        int id = processTable[i].PID;
-        if (pid == id){
-            return &processTable[i];
-        }
-    }
     
-    return NULL;
+    return &processTable[pid%MAXPROC];
 }
 // Create a new process
 int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority) {
@@ -157,6 +166,8 @@ int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority)
         newChild->nextSibling = parent->firstChild;
         parent->firstChild = newChild;
     }
+
+    
     return pid; // Dummy return
 }
 
@@ -164,10 +175,12 @@ int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority)
 int join(int *status) {
     // Your implementation here
 
-    printf("INSIDE JOIN\n");
+    //printf("INSIDE JOIN\n");
+
+    
 
     struct Process* parent = getProcess(runningProcessID);
-    struct Process *curChild = parent -> firstChild;
+    struct Process* curChild = parent -> firstChild;
     
     //printf("pointers created");
 
@@ -177,10 +190,10 @@ int join(int *status) {
     } 
     while (curChild != NULL){
         //printf("%s\n", curChild->state);
-        if (strcmp(curChild -> state,"ZOMBIE")==0){
+        if (strcmp(curChild -> state,"Terminated")==0){
             //printf("zombie found");
             if (curChild->prevSibling != NULL){
-                printf("Zombie is not first child\n");
+                //printf("Zombie is not first child\n");
             curChild->prevSibling->nextSibling = curChild->nextSibling;
             //printf("seg fault in here");
             }
@@ -188,13 +201,15 @@ int join(int *status) {
                 parent -> firstChild = curChild -> nextSibling;
             }
             if (curChild->nextSibling != NULL){
-                printf("Zombie is not =last child\n");
+                //printf("Zombie is not =last child\n");
             curChild->nextSibling->prevSibling = curChild->prevSibling;
             }
+        *status = curChild -> status;
         curChild -> state = "REMOVED";
+        int prevPID = curChild->PID;
         struct Process blank = {};
         processTable[curChild->PID % MAXPROC] = blank;
-        return 0;
+        return prevPID;
 
         } 
         //printf("checking next child\n");
@@ -203,7 +218,7 @@ int join(int *status) {
     } 
 
 
-    return 0; // Dummy return
+    return -2; // Dummy return
 }
 
 void printProcess (struct Process* p){
@@ -213,43 +228,45 @@ void printProcess (struct Process* p){
 void quit(int status, int switchToPid) {
     int curPid = runningProcessID;
 
+    // is quit being called on the right process? is running process the parent or the terminated process?
+
     struct Process* curProcess = getProcess(curPid);
-    printf("PID: %d | ADDRESS: %p\n", curProcess->PID, (void *)curProcess);
+    //("PID: %d | ADDRESS: %p\n", curProcess->PID, (void *)curProcess);
+
+    
 
     // printProcess(curProcess);
-        printf("GOT CUR PROC\n");
+        //printf("GOT CUR PROC\n");
 
     //struct Process* switchToProcess = &processTable[switchToPid % MAXPROC];
 
     curProcess->status = status;
-    curProcess->state = "ZOMBIE";
-    printf("AFTER SETTING ZOMBIE\n");
+    curProcess->state = "Terminated";
+    //printf("AFTER SETTING ZOMBIE\n");
 
-    printf("BEFORE FREEING STACK\n");
+    //printf("BEFORE FREEING STACK\n");
 
     // Assuming 'stack' is a pointer field in the struct, to be freed.
-    if (curProcess->stack == NULL){
-        printf("STACK IS NULL\n");
+    if (curProcess->stack != NULL){
+        //printf("STACK IS NOT NULL\n");
+        //dumpProcesses();
+        //free(curProcess->stack);
 
     }
-    printProcess(curProcess);
-    printf("RIGHT BEFORE FREEING STACK\n");
-    dumpProcesses();
-    struct Process* proc = getProcess(runningProcessID);
 
-    void* stackPtr = proc->stack;
-
-    printf("Stack pointer for pid %d is %p\n", runningProcessID, stackPtr);
-
-    free(curProcess->stack); //CAUSES SEG FAULT!!!!!!
-    printf("BEFORE NEW PROC\n");
+    //free(curProcess->stack); //CAUSES SEG FAULT!!!!!!
+    //printf("BEFORE NEW PROC\n");
 
     struct Process* newProcess = getProcess(switchToPid);
-        printf("GOT NEW PROC\n");
+                //printf("good here");
 
-    newProcess -> state = "RUNNING";
+        //printf("GOT NEW PROC\n");
+
+
+    newProcess -> state = "Running";
 
     runningProcessID = switchToPid;
+
 
     USLOSS_ContextSwitch(NULL, &(processTable[switchToPid % MAXPROC].context));
 }
@@ -263,31 +280,62 @@ int getpid(void) {
 
 // Start the processes (never returns)
 void startProcesses(void) {
+    phase2_start_service_processes();
+    phase3_start_service_processes();
+    phase4_start_service_processes();
+    phase5_start_service_processes();
+
     struct Process* init = &(processTable[1]);
-    init -> state =  "RUNNING";
+    init -> state =  "Running";
     runningProcessID = 1;
-    dumpProcesses();
+    //dumpProcesses();
+    //phase1_init()
     USLOSS_ContextSwitch(NULL, &(processTable[1].context));
 
 }
 
 // TEMP_switchTo (Assuming this function is optional)
 void TEMP_switchTo(int pid) {
-    printf("TEMPSWITCH PID: %d\n", pid);
+    
+
+
+    //printf("TEMPSWITCH PID: %d\n", pid);
     struct Process* oldProc = getProcess(runningProcessID); 
 
-    oldProc -> state = "READY";
+   
+
+
+    oldProc -> state = "Runnable";
     struct Process* newProc = getProcess(pid); 
 
-    newProc -> state = "RUNNING";   
+    newProc -> state = "Running";   
     int prevID = runningProcessID; 
     runningProcessID = pid;
+
+   //printf("free in temp works\n");
 
     //dumpProcesses();
     USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, &(processTable[pid % MAXPROC].context));
 
 }
 
+
+// int findOpenProcessTableSlot(){
+//     // MAXPROC
+//     int i = pidCounter;
+//     int j=0;
+//     while (j<MAXPROC){
+//         int slot = i % MAXPROC;
+//         if (processTable[slot].isInitialized == 0){
+//             pidCounter++;
+//             return slot;
+//         }
+//         i = (i+1) % MAXPROC;
+//         j++;
+//     }
+
+//     return -1;
+// }
 
 int findOpenProcessTableSlot(){
     // MAXPROC
@@ -316,7 +364,7 @@ void printChildren(struct Process* parent){
 
 }
 
-void dumpProcesses(void){
+void dumpProcessesForUs(void){
     for (int i = 0; i < MAXPROC; i++){
         // if (processTable[i].PID == 0){
         //     USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
@@ -329,3 +377,30 @@ void dumpProcesses(void){
     USLOSS_Console("-------------------------------------\n \n");
 
 }
+
+void dumpProcesses(void){
+    USLOSS_Console("PID  PPID  NAME              PRIORITY  STATE\n");
+    for (int i = 0; i < MAXPROC; i++){
+         if (processTable[i].isInitialized != 1){
+        //     USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
+             //printf("0000000");
+             continue;;
+         }
+        else if(processTable[i].PID == 1){
+            USLOSS_Console("%3d     0  %-13s     %d         %s",processTable[i].PID,processTable[i].name,processTable[i].priority,processTable[i].state);
+
+        }
+        else {
+            USLOSS_Console("%3d  %4d  %-13s     %d         %s",processTable[i].PID,processTable[i].parent->PID,processTable[i].name,processTable[i].priority,processTable[i].state);
+            
+        }
+        if(strcmp(processTable[i].state,"Terminated")==0){
+                USLOSS_Console("(%d)",processTable[i].status);
+            }
+        USLOSS_Console("\n");
+    }
+        //USLOSS_Console("Running Process ID: %d\n",runningProcessID);
+    //USLOSS_Console("-------------------------------------\n \n");
+
+}
+
