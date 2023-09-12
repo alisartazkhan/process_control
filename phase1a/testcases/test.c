@@ -9,9 +9,9 @@ int ff(char *);
 
 int testcase_main(void)
 {
-    fork1("XXp1", ff, NULL, USLOSS_MIN_STACK, 2);
-    fork1("XXp2", ff, NULL, USLOSS_MIN_STACK, 2);
-    fork1("XXp3", ff, NULL, USLOSS_MIN_STACK, 2);
+    fork1("XXp1", ff, "XXP1", USLOSS_MIN_STACK, 2);
+    fork1("XXp2", ff, "XXP2", USLOSS_MIN_STACK, 2);
+    fork1("XXp3", ff, "XXP3", USLOSS_MIN_STACK, 2);
 
 
     dumpProcesses();
@@ -25,9 +25,9 @@ int testcase_main(void)
     join(NULL);
     dumpProcesses();
 
-    //TEMP_switchTo(5);
-    // join(NULL);
-    // dumpProcesses();
+    TEMP_switchTo(5); // GIVES SEG FAULT SINCE IT CANT FREE THE STACK MEMORY IN QUIT()
+    join(NULL); 
+    dumpProcesses();
 
 
 
@@ -43,8 +43,8 @@ int testcase_main(void)
 int ff(char* arg)
 {
 
-    printf("4th process runs");
-    quit(4,3);
+    printf("%s process runs\n", arg);
+    return 0;
 }
 
 

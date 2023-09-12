@@ -35,12 +35,12 @@ struct Process processTable[MAXPROC];
 int findOpenProcessTableSlot();
 void addChildToParent(struct Process* ,struct Process*);
 void printChildren(struct Process*);
-// void initQueue(Queue*);
-// void addToRunQueue(int, Queue*);
 void dumpProcesses();
+void trampoline(void);
+struct Process* getProcess(int);
+void printProcess (struct Process*);
 
-
-int createProcess(char *name, void *startFunc, void *arg, int stackSize, int priority) {
+int createProcess(char *name, int (*startFunc)(char*), void *arg, int stackSize, int priority) {
     // Disable interrupts  
     int old_psr = USLOSS_PsrGet();
     USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
@@ -60,7 +60,7 @@ int createProcess(char *name, void *startFunc, void *arg, int stackSize, int pri
 
 
     // Initialize context
-    USLOSS_ContextInit(&(processTable[slot].context), processTable[slot].stack, stackSize, NULL, startFunc);
+    USLOSS_ContextInit(&(processTable[slot].context), processTable[slot].stack, stackSize, NULL, trampoline);
 
     // Restore interrupts
     USLOSS_PsrSet(old_psr);
@@ -94,7 +94,7 @@ int sentinel(char *arg){
     //     i++;}
     // USLOSS_Console("sentinel Done.\n");
     // quit(0, 1);
-    return 1;
+    return 0;
 }
 
 
@@ -109,32 +109,35 @@ void phase1_init(void) {
 
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main, NULL,USLOSS_MIN_STACK,3);
-
-
-
-    // // Initialize run queues
-    // for (int i = 0; i < NUM_PRIORITIES; i++) {
-        
-    //     //initQueue(runQueues[i]); 
-    // }
-
-
-    // fork1("1st child",NULL,NULL,USLOSS_MIN_STACK,7);
-    // fork1("2nd child",NULL,NULL,USLOSS_MIN_STACK,3);
-    // fork1("3rd child",NULL,NULL,USLOSS_MIN_STACK,3);
-
-    // runningProcessID = 3;
-    // fork1("4th child",NULL,NULL,USLOSS_MIN_STACK,3);
-    // fork1("5th child",NULL,NULL,USLOSS_MIN_STACK,3);
-
-    // runningProcessID = 4;
-    // fork1("6th child",NULL,NULL,USLOSS_MIN_STACK,3);
-    // fork1("7th child",NULL,NULL,USLOSS_MIN_STACK,3);
-    
 }
 
+void trampoline(void){
+    /**
+     * Trampoline:
+     * Gets return number from child main and pass that in for quit()
+     * enable interrupts
+     * if process returns to you call quit
+    */
+    struct Process* curProcess = getProcess(getpid());
+    int status = curProcess->startFunc(curProcess->arg);
+    printf("FINISHED RUNNING CHILD MAIN\n");
+
+    quit(status, curProcess->parent->PID);
+}
+
+struct Process* getProcess(int pid) {
+
+    for (int i = 0; i< MAXPROC; i++){
+        int id = processTable[i].PID;
+        if (pid == id){
+            return &processTable[i];
+        }
+    }
+    
+    return NULL;
+}
 // Create a new process
-int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority) {
+int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority) {
 
     int pid = createProcess(name, func, arg, stacksize, priority);
 
@@ -161,9 +164,9 @@ int fork1(char *name, int(*func)(char *), char *arg, int stacksize, int priority
 int join(int *status) {
     // Your implementation here
 
-    //printf("join started");
+    printf("INSIDE JOIN\n");
 
-    struct Process* parent = &processTable[runningProcessID % MAXPROC];
+    struct Process* parent = getProcess(runningProcessID);
     struct Process *curChild = parent -> firstChild;
     
     //printf("pointers created");
@@ -203,22 +206,47 @@ int join(int *status) {
     return 0; // Dummy return
 }
 
-
+void printProcess (struct Process* p){
+     USLOSS_Console("PID: %d | NAME: %s | PRIORITY: %d | STATE: %s | ADDRESS: %p\n",p->PID,p->name,p->priority, p->state, &p);
+}
 // Terminate the current process
 void quit(int status, int switchToPid) {
     int curPid = runningProcessID;
 
-    struct Process* curProcess = &processTable[curPid % MAXPROC];
+    struct Process* curProcess = getProcess(curPid);
+    printf("PID: %d | ADDRESS: %p\n", curProcess->PID, (void *)curProcess);
+
+    // printProcess(curProcess);
+        printf("GOT CUR PROC\n");
+
     //struct Process* switchToProcess = &processTable[switchToPid % MAXPROC];
 
     curProcess->status = status;
     curProcess->state = "ZOMBIE";
+    printf("AFTER SETTING ZOMBIE\n");
 
+    printf("BEFORE FREEING STACK\n");
 
     // Assuming 'stack' is a pointer field in the struct, to be freed.
-    free(curProcess->stack);
+    if (curProcess->stack == NULL){
+        printf("STACK IS NULL\n");
 
-    struct Process* newProcess = &(processTable[switchToPid % MAXPROC]);
+    }
+    printProcess(curProcess);
+    printf("RIGHT BEFORE FREEING STACK\n");
+    dumpProcesses();
+    struct Process* proc = getProcess(runningProcessID);
+
+    void* stackPtr = proc->stack;
+
+    printf("Stack pointer for pid %d is %p\n", runningProcessID, stackPtr);
+
+    free((*curProcess).stack);
+    printf("BEFORE NEW PROC\n");
+
+    struct Process* newProcess = getProcess(switchToPid);
+        printf("GOT NEW PROC\n");
+
     newProcess -> state = "RUNNING";
 
     runningProcessID = switchToPid;
@@ -245,12 +273,16 @@ void startProcesses(void) {
 
 // TEMP_switchTo (Assuming this function is optional)
 void TEMP_switchTo(int pid) {
-    struct Process* oldProc = &processTable[runningProcessID % MAXPROC]; 
+    printf("TEMPSWITCH PID: %d\n", pid);
+    struct Process* oldProc = getProcess(runningProcessID); 
+
     oldProc -> state = "READY";
-    struct Process* newProc = &processTable[pid % MAXPROC]; 
+    struct Process* newProc = getProcess(pid); 
+
     newProc -> state = "RUNNING";   
     int prevID = runningProcessID; 
     runningProcessID = pid;
+
     //dumpProcesses();
     USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, &(processTable[pid % MAXPROC].context));
 
@@ -290,7 +322,7 @@ void dumpProcesses(void){
         //     USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
         //     continue;
         // }
-        USLOSS_Console("%d: PID: %d | NAME: %s | PRIORITY: %d | STATE: %s | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].state);
+        USLOSS_Console("%d: PID: %d | NAME: %s | PRIORITY: %d | STATE: %s | ADDRESS: %p | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].state, &processTable[i]);
         printChildren(&processTable[i]);
     }
         USLOSS_Console("Running Process ID: %d\n",runningProcessID);
