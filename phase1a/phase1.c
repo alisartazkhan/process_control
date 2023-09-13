@@ -128,8 +128,7 @@ int stackSize, int priority) {
 int init_main(char *arg){
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
-    USLOSS_Console("Phase 1A TEMPORARY HACK: init() manually switching to 
-    testcase_main() after using fork1() to create it.\n");
+    USLOSS_Console("Phase 1A TEMPORARY HACK: init() manually switching to testcase_main() after using fork1() to create it.\n");
 
     TEMP_switchTo(3);
     USLOSS_Halt(0);
@@ -174,10 +173,9 @@ void testcase_main_local(){
     USLOSS_PsrSet(psr | USLOSS_PSR_CURRENT_INT);
 
     int retVal = testcase_main();
-    USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, 
-    simulation will now halt.\n");
+    USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, simulation will now halt.\n");
     if(retVal != 0){
-        printf("ERROR MESSAGE");
+        USLOSS_Console("ERROR MESSAGE");
     }
 
     // sets interrupts state to old state, and halts program, signifying 
@@ -212,7 +210,7 @@ void phase1_init(void) {
 void trampoline(void){
     struct Process* curProcess = getProcess(getpid());
     int status = curProcess->startFunc(curProcess->arg);
-    printf("FINISHED RUNNING CHILD MAIN\n");
+    USLOSS_Console("FINISHED RUNNING CHILD MAIN\n");
 }
 
 
@@ -246,8 +244,7 @@ int priority) {
 
     int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
     if (mode != USLOSS_PSR_CURRENT_MODE) {
-        USLOSS_Console("ERROR: Someone attempted to call fork1 while in
-         user mode!\n");
+        USLOSS_Console("ERROR: Someone attempted to call fork1 while in user mode!\n");
         USLOSS_Halt(1);
     }
 
@@ -255,7 +252,8 @@ int priority) {
         return -2;
     }
     int pid = createProcess(name, func, arg, stacksize, priority);
-    if (pid == -1 || (priority > 7 || priority < 1) || func == NULL || name == NULL || strlen(name) > MAXNAME){
+    if (pid == -1 || (priority > 7 || priority < 1) || func == NULL || 
+    name == NULL || strlen(name) > MAXNAME){
         return -1;
     }
 
