@@ -195,7 +195,6 @@ void phase1_init(void) {
 void trampoline(void){
     struct Process* curProcess = getProcess(getpid());
     int status = curProcess->startFunc(curProcess->arg);
-    USLOSS_Console("FINISHED RUNNING CHILD MAIN\n");
 }
 
 
@@ -353,21 +352,32 @@ void quit(int status, int switchToPid) {
     runningProcessID = switchToPid;
 
 
-    USLOSS_ContextSwitch(NULL, &(processTable[switchToPid % MAXPROC].context));
+    USLOSS_ContextSwitch(NULL,
+    &(processTable[switchToPid % MAXPROC].context));
 }
 
 
 /*
-    Description: returns the PID of current process
+    Description: returns the PID of current process from the global variable
 
     Arg: none
 
-    return int: none
+    return int: ID of the current process
 */
 int getpid(void) {
     return runningProcessID; 
 }
 
+
+/*
+    Description: Boostrap function that calls the phase service starts
+    process, sets the init function to running, adds it to the table,
+    and the context switches to init.
+
+    Arg: none
+
+    return none
+*/
 void startProcesses(void) {
     phase2_start_service_processes();
     phase3_start_service_processes();
@@ -382,13 +392,18 @@ void startProcesses(void) {
 }
 
 
-void TEMP_switchTo(int pid) {
-    
 
+/*
+    Description: sets the current process to runnable, next process to 
+    running, and the context switches to the next process given by the pid.
+
+    Arg: int pid: pid of process to switch to
+
+    return; none
+*/
+void TEMP_switchTo(int pid) {
 
     struct Process* oldProc = getProcess(runningProcessID); 
-
-
     oldProc -> state = "Runnable";
     struct Process* newProc = getProcess(pid); 
 
@@ -397,13 +412,21 @@ void TEMP_switchTo(int pid) {
     runningProcessID = pid;
 
 
-    USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, &(processTable[pid % MAXPROC].context));
+    USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, 
+    &(processTable[pid % MAXPROC].context));
 
 }
 
 
 
+/*
+    Description: iterates through the process table to find an open slot
+    for the created process using pidCounter % MAXPROC.
 
+    Arg: none
+
+    return int: the found slot for the process or -1 if table is full
+*/
 int findOpenProcessTableSlot(){
     int i = 0;
     while (i<MAXPROC){
@@ -418,29 +441,15 @@ int findOpenProcessTableSlot(){
 }
 
 
-void printChildren(struct Process* parent){
-    struct Process* curChild = parent->firstChild;
-    USLOSS_Console("child list for %d: ", parent->PID);
-    
-    while (curChild != NULL){
-        USLOSS_Console("%s -> ",curChild->name);
-        curChild = curChild->nextSibling;
-    }
-    USLOSS_Console("NULL\n");
 
-}
+/*
+    Description: prints information about the processTable in the same formatting
+    given by the test cases.
 
-void dumpProcessesForUs(void){
-    for (int i = 0; i < MAXPROC; i++){
+    Arg: none
 
-        USLOSS_Console("%d: PID: %d | NAME: %s | PRIORITY: %d | STATE: %s | ADDRESS: %p | ",i,processTable[i].PID,processTable[i].name,processTable[i].priority, processTable[i].state, &processTable[i]);
-        printChildren(&processTable[i]);
-    }
-        USLOSS_Console("Running Process ID: %d\n",runningProcessID);
-    USLOSS_Console("-------------------------------------\n \n");
-
-}
-
+    return: none
+*/
 void dumpProcesses(void){
     USLOSS_Console(" PID  PPID  NAME              PRIORITY  STATE\n");
     for (int i = 0; i < MAXPROC; i++){
