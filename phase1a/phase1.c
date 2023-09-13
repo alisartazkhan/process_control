@@ -88,16 +88,13 @@ int init_main(char *arg){
 }
 
 int sentinel(char *arg){
-    // int i = 0;
-    // while (i<10){
-    //     USLOSS_Console("sentinel() running: %d\n", i);
-    //     if (i==5){
-    //         TEMP_switchTo(3);  
-    //         ///USLOSS_ContextSwitch(&processTable[2].context, &(processTable[3].context));
-    //   }
-    //     i++;}
-    // USLOSS_Console("sentinel Done.\n");
-    // quit(0, 1);
+    while (1) {
+        if (phase2_check_io() == 0){
+            USLOSS_Console("DEADLOCK DETECTED\n");
+            USLOSS_Halt(1);
+        }
+        USLOSS_WaitInt();
+    }
     return 0;
 }
 
@@ -192,12 +189,7 @@ int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority)
 
 // Wait for a child process to terminate
 int join(int *status) {
-    // Your implementation here
-
-    //printf("INSIDE JOIN\n");
-
     
-
     struct Process* parent = getProcess(runningProcessID);
     struct Process* curChild = parent -> firstChild;
     
