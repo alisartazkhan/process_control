@@ -218,6 +218,9 @@ int join(int *status) {
         *status = curChild -> status;
         curChild -> state = "REMOVED";
         int prevPID = curChild->PID;
+        if (curChild->stack != NULL){
+            free(curChild->stack);
+        }
         struct Process blank = {};
         processTable[curChild->PID % MAXPROC] = blank;
         return prevPID;
@@ -268,12 +271,7 @@ void quit(int status, int switchToPid) {
     //printf("BEFORE FREEING STACK\n");
 
     // Assuming 'stack' is a pointer field in the struct, to be freed.
-    if (curProcess->stack != NULL){
-        //printf("STACK IS NOT NULL\n");
-        //dumpProcesses();
-        //free(curProcess->stack);
 
-    }
 
     //free(curProcess->stack); //CAUSES SEG FAULT!!!!!!
     //printf("BEFORE NEW PROC\n");
