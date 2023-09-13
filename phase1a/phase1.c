@@ -48,8 +48,6 @@ int createProcess(char *name, int (*startFunc)(char*), void *arg, int stackSize,
     int slot = findOpenProcessTableSlot();
     // USLOSS_Console("SLOT: %d\n", slot);
     if (slot == -1) { // IMPLEMENT 
-        USLOSS_Console("No slot available");
-        USLOSS_Halt(1);
         return -1; 
     }
 
@@ -105,12 +103,22 @@ int sentinel(char *arg){
 
 
 void testcase_main_local(){
+    // Save interrupt state
+    int psr = USLOSS_PsrGet();
+    
+    // Enable interrupts
+    USLOSS_PsrSet(psr | USLOSS_PSR_CURRENT_INT);
+
     int retVal = testcase_main();
     USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, simulation will now halt.\n");
     if(retVal != 0){
         printf("ERROR MESSAGE");
     }
+    // Restore interrupt state
+    USLOSS_PsrSet(psr);
+
     USLOSS_Halt(retVal);
+
 }
 
 
@@ -147,8 +155,19 @@ struct Process* getProcess(int pid) {
 }
 // Create a new process
 int fork1(char *name, int(func)(char *), char *arg, int stacksize, int priority) {
+    int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
+    if (mode != USLOSS_PSR_CURRENT_MODE) {
+        USLOSS_Console("ERROR: Someone attempted to call fork1 while in user mode!\n");
+        USLOSS_Halt(1);
+    }
 
+    if (stacksize < USLOSS_MIN_STACK){
+        return -2;
+    }
     int pid = createProcess(name, func, arg, stacksize, priority);
+    if (pid == -1 || (priority > 7 || priority < 1)){
+        return -1;
+    }
 
     int newChildSlot = pid % MAXPROC;
     int parentID = getpid();
@@ -226,6 +245,13 @@ void printProcess (struct Process* p){
 }
 // Terminate the current process
 void quit(int status, int switchToPid) {
+
+    int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
+    if (mode != USLOSS_PSR_CURRENT_MODE) {
+        USLOSS_Console("ERROR: Someone attempted to call quit while in user mode!\n");
+        USLOSS_Halt(1);
+
+    }
     int curPid = runningProcessID;
 
     // is quit being called on the right process? is running process the parent or the terminated process?
@@ -233,7 +259,10 @@ void quit(int status, int switchToPid) {
     struct Process* curProcess = getProcess(curPid);
     //("PID: %d | ADDRESS: %p\n", curProcess->PID, (void *)curProcess);
 
-    
+    if (curProcess -> firstChild != NULL){
+        USLOSS_Console("ERROR: Process pid %d called quit() while it still had children.\n", curPid);
+        USLOSS_Halt(1);
+    }
 
     // printProcess(curProcess);
         //printf("GOT CUR PROC\n");
@@ -379,7 +408,7 @@ void dumpProcessesForUs(void){
 }
 
 void dumpProcesses(void){
-    USLOSS_Console("PID  PPID  NAME              PRIORITY  STATE\n");
+    USLOSS_Console(" PID  PPID  NAME              PRIORITY  STATE\n");
     for (int i = 0; i < MAXPROC; i++){
          if (processTable[i].isInitialized != 1){
         //     USLOSS_Console("%d: PID: -- | NAME: -- | PRIORITY: -- | \n", i);
@@ -387,11 +416,11 @@ void dumpProcesses(void){
              continue;;
          }
         else if(processTable[i].PID == 1){
-            USLOSS_Console("%3d     0  %-13s     %d         %s",processTable[i].PID,processTable[i].name,processTable[i].priority,processTable[i].state);
+            USLOSS_Console(" %3d     0  %-13s     %d         %s",processTable[i].PID,processTable[i].name,processTable[i].priority,processTable[i].state);
 
         }
         else {
-            USLOSS_Console("%3d  %4d  %-13s     %d         %s",processTable[i].PID,processTable[i].parent->PID,processTable[i].name,processTable[i].priority,processTable[i].state);
+            USLOSS_Console(" %3d  %4d  %-13s     %d         %s",processTable[i].PID,processTable[i].parent->PID,processTable[i].name,processTable[i].priority,processTable[i].state);
             
         }
         if(strcmp(processTable[i].state,"Terminated")==0){

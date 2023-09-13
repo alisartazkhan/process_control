@@ -16,7 +16,7 @@ LDFLAGS = -L${LIB_DIR} ${LIBS}
 
 
 VPATH = testcases
-TESTS = test03
+TESTS = test08
 
 # test00 test01 test02 test03        test05 test06 test07 test08 test09 \
 #                                                          test17        test19 \
