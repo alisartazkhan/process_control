@@ -69,6 +69,7 @@ void printChildren(struct Process*);
 void dumpProcesses();
 void trampoline(void);
 struct Process* getProcess(int);
+int init_main(char*);
 
 
 
@@ -117,23 +118,7 @@ int stackSize, int priority) {
 
 
 
-/*
-    Description: Called in boot strap process. Creates the sentinel
-    and testcase_main processes, and context switched to testcase_main
 
-    Arg: char *arg: main function to be ran
-
-    return int: error code, but should be halted before it returns anyway
-*/
-int init_main(char *arg){
-    fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
-    fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
-    USLOSS_Console("Phase 1A TEMPORARY HACK: init() manually switching to testcase_main() after using fork1() to create it.\n");
-
-    TEMP_switchTo(3);
-    USLOSS_Halt(0);
-    return 0;
-}
 
 
 /*
@@ -360,8 +345,6 @@ void quit(int status, int switchToPid) {
    
     curProcess->status = status;
     curProcess->state = "Terminated";
-    
-
 
     struct Process* newProcess = getProcess(switchToPid);
 
@@ -374,7 +357,13 @@ void quit(int status, int switchToPid) {
 }
 
 
+/*
+    Description: returns the PID of current process
 
+    Arg: none
+
+    return int: none
+*/
 int getpid(void) {
     return runningProcessID; 
 }
@@ -474,3 +463,22 @@ void dumpProcesses(void){
     
 }
 
+
+
+/*
+    Description: Called in boot strap process. Creates the sentinel
+    and testcase_main processes, and context switched to testcase_main
+
+    Arg: char *arg: main function to be ran
+
+    return int: error code, but should be halted before it returns anyway
+*/
+int init_main(char *arg){
+    fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
+    fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
+    USLOSS_Console("Phase 1A TEMPORARY HACK: init() manually switching to testcase_main() after using fork1() to create it.\n");
+
+    TEMP_switchTo(3);
+    USLOSS_Halt(0);
+    return 0;
+}
