@@ -115,18 +115,31 @@ void printProcess(int pid){
 }
 
 void dispatcher(){
+    int found = 0;
+    int retPID;
     //dumpQueue();
-    //dumpProcesses();
+    dumpProcesses();
     for (int i = 1; i < 8; i++){
-        if (runQueues[i] == NULL){
-            USLOSS_Console("priorty %d is empty\n", i);
-            continue;}
-        runProcess(runQueues[i]->PID);
-        printProcess(runQueues[i]->PID);
-        break;
+        struct Process * curProcess = runQueues[i];
+        while (curProcess != NULL){
+
+            USLOSS_Console("Process in question: %s\n",curProcess->name);
+
+            if (strcmp(curProcess->state,"Runnable") ==0){
+                runProcess(curProcess->PID);
+                return;
+
+            }
+            
+            curProcess = curProcess->nextQueueNode;
+
+        }
+        USLOSS_Console("priority %d has no runnable process\n",i);
 
         //USLOSS_Console("iteration: %d\n",i);
     }
+
+
 }
 
 
@@ -141,7 +154,8 @@ int isZapped(){
 }
 
 void blockMe(int block_status){
-
+    (processTable[runningProcessID % MAXPROC]).state = "Blocked";
+    dispatcher();
 }
 
 int unblockProc(int pid){
@@ -353,7 +367,8 @@ int priority) {
     struct Process* newChild = &processTable[newChildSlot]; 
     newChild->parent = &processTable[parentID%MAXPROC]; 
     struct Process* parent = &processTable[parentID%MAXPROC]; 
-
+    parent -> state = "Runnable";
+    // USLOSS_ContextSwitch(&processTable[parentID%MAXPROC].context, NULL);
 
     if (parent->firstChild == NULL){
         parent->firstChild = newChild;
@@ -363,7 +378,8 @@ int priority) {
         parent->firstChild = newChild;
     }
 
-    
+    dispatcher();
+
     return pid; 
 }
 
@@ -431,35 +447,27 @@ int join(int *status) {
 */
 void quit(int status) {
 
-    // int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
-    // if (mode != USLOSS_PSR_CURRENT_MODE) {
-    //     USLOSS_Console("ERROR: Someone attempted to call quit while in user mode!\n");
-    //     USLOSS_Halt(1);
+    int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
+    if (mode != USLOSS_PSR_CURRENT_MODE) {
+        USLOSS_Console("ERROR: Someone attempted to call quit while in user mode!\n");
+        USLOSS_Halt(1);
 
-    // }
-    // int curPid = runningProcessID;
+    }
+    int curPid = runningProcessID;
 
 
-    // struct Process* curProcess = getProcess(curPid);
+    struct Process* curProcess = getProcess(curPid);
 
-    // if (curProcess -> firstChild != NULL){
-    //     USLOSS_Console("ERROR: Process pid %d called quit() while it still had children.\n", curPid);
-    //     USLOSS_Halt(1);
-    // }
+    if (curProcess -> firstChild != NULL){
+        USLOSS_Console("ERROR: Process pid %d called quit() while it still had children.\n", curPid);
+        USLOSS_Halt(1);
+    }
 
    
-    // curProcess->status = status;
-    // curProcess->state = "Terminated";
+    curProcess->status = status;
+    curProcess->state = "Terminated";
 
-    // struct Process* newProcess = getProcess(switchToPid);
-
-    // newProcess -> state = "Running";
-
-    // runningProcessID = switchToPid;
-
-
-    // USLOSS_ContextSwitch(NULL,
-    // &(processTable[switchToPid % MAXPROC].context));
+    dispatcher();
 }
 
 
@@ -561,8 +569,6 @@ void dumpProcesses(void){
          }
         else if(processTable[i].PID == 1){
             USLOSS_Console(" %3d     0  %-13s     %d         %s",processTable[i].PID,processTable[i].name,processTable[i].priority,processTable[i].state);
-            USLOSS_Console("init print\n");
-
         }
         else {
             USLOSS_Console(" %3d  %4d  %-13s     %d         %s",processTable[i].PID,processTable[i].parent->PID,processTable[i].name,processTable[i].priority,processTable[i].state);
@@ -607,11 +613,14 @@ void dumpQueue(){
     return int: error code, but should be halted before it returns anyway
 */
 int init_main(char *arg){
-        //USLOSS_Console("before dump");
+    
+    USLOSS_Console("init main started\n");
+    
+    
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
     //dumpQueue();
-    fork1("testcase_main2", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
+    //fork1("testcase_main2", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
     dumpProcesses();
     dumpQueue();
     //USLOSS_Console("end of initmain");
