@@ -9,11 +9,17 @@ int XXp1(char *);
 int testcase_main()
 {
     
-
+    int status;
 
     USLOSS_Console("testcase_main(): started\n");
 
     fork1("other", XXp1, NULL,USLOSS_MIN_STACK,1);
+
+    join(&status);
+
+    USLOSS_Console("JOIN has been ran");
+
+    dumpProcesses();
 
 
     // /blockMe(5);

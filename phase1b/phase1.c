@@ -78,6 +78,7 @@ void dumpQueue();
 void trampoline();
 struct Process* getProcess(int);
 int init_main(char*);
+void removeNode(int);
 
 
 void runProcess(int pid){
@@ -97,8 +98,15 @@ void runProcess(int pid){
         //USLOSS_Console("1\n");
         return;
     }
+
+
     struct Process* oldProc = getProcess(runningProcessID); 
-    oldProc -> state = "Runnable";
+
+    if (strcmp(oldProc->state,"Terminated") ==1){
+        oldProc -> state = "Runnable";
+    }
+
+    
     struct Process* newProc = getProcess(pid); 
 
     newProc -> state = "Running";   
@@ -117,7 +125,7 @@ void printProcess(int pid){
 void dispatcher(){
     int found = 0;
     int retPID;
-    //dumpQueue();
+    dumpQueue();
     dumpProcesses();
     for (int i = 1; i < 8; i++){
         struct Process * curProcess = runQueues[i];
@@ -462,14 +470,33 @@ void quit(int status) {
         USLOSS_Console("ERROR: Process pid %d called quit() while it still had children.\n", curPid);
         USLOSS_Halt(1);
     }
-
+    
    
     curProcess->status = status;
     curProcess->state = "Terminated";
+    removeNode(curProcess->PID);
 
     dispatcher();
 }
 
+void removeNode(int pid){
+    struct Process* p = getProcess(pid);
+    int priority = p->priority;
+
+    struct Process* curProcess = runQueues[priority];
+    if (curProcess != NULL && curProcess->PID == pid){
+        runQueues[priority] = curProcess -> nextQueueNode;
+        curProcess -> nextQueueNode -> prevQueueNode = NULL;
+    }
+    else{
+        while (curProcess != NULL && curProcess->PID != pid){curProcess = curProcess -> nextQueueNode;}
+
+        struct Process* prevNode = curProcess -> prevQueueNode;
+        struct Process* nextNode = curProcess -> nextQueueNode;
+        prevNode -> nextQueueNode = nextNode;
+        nextNode -> prevQueueNode = prevNode;
+    }
+}
 
 /*
     Description: returns the PID of current process from the global variable
