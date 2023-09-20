@@ -61,6 +61,11 @@ struct Process {
     bool isZombie;
     int (*startFunc)(char*);
     char* arg;
+    int time;
+    int startTime;
+    int endTime;
+    int totalTime;
+
 
 };
 
@@ -78,11 +83,11 @@ void dumpQueue();
 void trampoline();
 struct Process* getProcess(int);
 int init_main(char*);
-void removeNode(int);
+void removeNode(struct Process*);
 
 
 void runProcess(int pid){
-    USLOSS_Console("name of process running : %s\n",getProcess(pid)->name);
+    //USLOSS_Console("name of process running : %s\n",getProcess(pid)->name);
 
 
     if (getpid() == -1){
@@ -94,6 +99,7 @@ void runProcess(int pid){
         runningProcessID = pid;
         //USLOSS_Console("name of process: %s\n",&(processTable[pid % MAXPROC].name));
 
+        newProc->startTime = currentTime();
         USLOSS_ContextSwitch(NULL, &(processTable[pid % MAXPROC].context));
         //USLOSS_Console("1\n");
         return;
@@ -123,17 +129,34 @@ void printProcess(int pid){
 }
 
 void dispatcher(){
+    
+    struct Process * prevProc = getProcess(runningProcessID);
+
+    int timeRunning = readtime();
+
+    prevProc->totalTime += timeRunning;
+
+
+
+    //USLOSS_Console("Process %s ran for %d ms\n",prevProc->name,timeRunning);
+    //USLOSS_Console("Process total %d\n",prevProc->totalTime);
+
+
     int found = 0;
     int retPID;
-    dumpQueue();
-    dumpProcesses();
+    //dumpQueue();
+    //dumpProcesses();
+
+    USLOSS_Console("loop started\n");
+
     for (int i = 1; i < 8; i++){
         struct Process * curProcess = runQueues[i];
         while (curProcess != NULL){
-
             USLOSS_Console("Process in question: %s\n",curProcess->name);
 
             if (strcmp(curProcess->state,"Runnable") ==0){
+
+                USLOSS_Console("does this error\n");
                 runProcess(curProcess->PID);
                 return;
 
@@ -167,25 +190,43 @@ void blockMe(int block_status){
 }
 
 int unblockProc(int pid){
+    
+    USLOSS_Console("hello");
+    (processTable[pid % MAXPROC]).state = 'Runnable';
+    USLOSS_Console("hello");
+    dispatcher();
     return 0;
 }
 
-int readCurStartTime(){
-    return 0;
+
+// Get start time of current time slice
+int readCurStartTime() {
+  return getProcess(getpid())->startTime; 
 }
 
-void timeSlice(){
-
+// Get current time 
+int currentTime() {
+  int status;
+  USLOSS_DeviceInput(USLOSS_CLOCK_DEV, 0, &status);
+  return status;
 }
 
-int readtime(){
 
+// Get total time for current process
+int readtime() {
+  return currentTime() - readCurStartTime(); 
 }
 
-int currentTime(){
+// Check if time slice expired
+void timeSlice() {
+
+
+
+  if (readtime() >= 80) {
+    dispatcher();
+  }
 
 }
-
 
 /*
     Description: Creates a process and sets its fields to the
@@ -214,7 +255,7 @@ int stackSize, int priority) {
     struct Process p = {.PID = pidCounter-1, .priority = priority,
     .stack = malloc(stackSize), .startFunc = startFunc, .arg = arg, 
     .isInitialized = 1, .state = "Runnable", .nextSibling = NULL, 
-    .prevSibling = NULL };
+    .prevSibling = NULL, .totalTime = 0 };
 
     processTable[slot] = p;
     strcpy(processTable[slot].name, name);
@@ -281,7 +322,7 @@ void testcase_main_local(){
     USLOSS_PsrSet(psr | USLOSS_PSR_CURRENT_INT);
 
     int retVal = testcase_main();
-    USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, simulation will now halt.\n");
+    //USLOSS_Console("Phase 1A TEMPORARY HACK: testcase_main() returned, simulation will now halt.\n");
     if(retVal != 0){
         USLOSS_Console("ERROR MESSAGE");
     }
@@ -328,7 +369,7 @@ void trampoline(void){
 
 /** 
      * Description: getter function that return process
-     * 
+     *  
      * Arg: pid of process to retrieve
      * 
      * return: Process that you are looking for
@@ -404,6 +445,8 @@ int join(int *status) {
     
     struct Process* parent = getProcess(runningProcessID);
     struct Process* curChild = parent -> firstChild;
+
+    USLOSS_Console("firstCHILD = %s\n",curChild->name);
     
 
     if (curChild == NULL){
@@ -437,6 +480,8 @@ int join(int *status) {
         
     } 
 
+    USLOSS_Console("Blocked\n");
+    blockMe(0);
 
     return -2; 
 }
@@ -454,6 +499,8 @@ int join(int *status) {
     return int: none
 */
 void quit(int status) {
+
+    //USLOSS_Console("quit called\n");
 
     int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
     if (mode != USLOSS_PSR_CURRENT_MODE) {
@@ -474,28 +521,45 @@ void quit(int status) {
    
     curProcess->status = status;
     curProcess->state = "Terminated";
-    removeNode(curProcess->PID);
+
+    //USLOSS_Console("node about to be renmvoed\n");
+    removeNode(curProcess);
+    //USLOSS_Console("node removed\n");
+
+    int parentID = curProcess->parent->PID;
+
+    USLOSS_Console("parentID = %d\n",parentID);
+    unblockProc(parentID);
 
     dispatcher();
 }
 
-void removeNode(int pid){
-    struct Process* p = getProcess(pid);
+void removeNode(struct Process * p){
     int priority = p->priority;
 
     struct Process* curProcess = runQueues[priority];
-    if (curProcess != NULL && curProcess->PID == pid){
-        runQueues[priority] = curProcess -> nextQueueNode;
-        curProcess -> nextQueueNode -> prevQueueNode = NULL;
-    }
-    else{
-        while (curProcess != NULL && curProcess->PID != pid){curProcess = curProcess -> nextQueueNode;}
 
-        struct Process* prevNode = curProcess -> prevQueueNode;
-        struct Process* nextNode = curProcess -> nextQueueNode;
-        prevNode -> nextQueueNode = nextNode;
-        nextNode -> prevQueueNode = prevNode;
+    if(curProcess == p && p->nextQueueNode==NULL){
+        runQueues[priority] = NULL;
     }
+
+    else if (curProcess == p && p->nextQueueNode != NULL){
+        runQueues[priority] = p->nextQueueNode;
+
+
+    }
+    // if (curProcess != NULL && curProcess->PID == pid){
+    //     runQueues[priority] = curProcess -> nextQueueNode;
+    //     curProcess -> nextQueueNode -> prevQueueNode = NULL;
+    // }
+    // else{
+    //     while (curProcess != NULL && curProcess->PID != pid){curProcess = curProcess -> nextQueueNode;}
+
+    //     struct Process* prevNode = curProcess -> prevQueueNode;
+    //     struct Process* nextNode = curProcess -> nextQueueNode;
+    //     prevNode -> nextQueueNode = nextNode;
+    //     nextNode -> prevQueueNode = prevNode;
+    // }
 }
 
 /*
@@ -525,7 +589,11 @@ void startProcesses(void) {
     phase4_start_service_processes();
     phase5_start_service_processes();
 
+
+    //technically suposed to call dispatcher
     dispatcher();
+
+    //runProcess(1);
 
 }
 
@@ -641,20 +709,33 @@ void dumpQueue(){
 */
 int init_main(char *arg){
     
-    USLOSS_Console("init main started\n");
+    //USLOSS_Console("init main started\n");
     
     
     fork1("sentinel", sentinel, NULL,USLOSS_MIN_STACK,7);
     fork1("testcase_main", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
     //dumpQueue();
     //fork1("testcase_main2", testcase_main_local, NULL,USLOSS_MIN_STACK,3);
-    dumpProcesses();
-    dumpQueue();
+    //dumpProcesses();
+    //dumpQueue();
     //USLOSS_Console("end of initmain");
 
-    dispatcher();
+
+
+
+
+    int retVal = 0;
+    int errorCode = 0;
+    while (retVal != -2){
+        //USLOSS_Console("errorCode: %d\n",errorCode);
+        retVal = join(&errorCode);
+        getProcess(1) -> state = "Runnable";
+        dispatcher();
+    }
+
     // USLOSS_ContextSwitch(NULL, &(processTable[3].context));
     // TEMP_switchTo(3);
     USLOSS_Halt(0);
     return 0;
 }
+
