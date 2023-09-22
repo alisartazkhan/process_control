@@ -119,6 +119,7 @@ void runProcess(int pid){
     int prevID = runningProcessID; 
     runningProcessID = pid;
 
+    USLOSS_Console("%s is running.\n", newProc -> name);
     USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, 
     &(processTable[pid % MAXPROC].context));
 
@@ -131,46 +132,30 @@ void printProcess(int pid){
 void dispatcher(){
     
     struct Process * prevProc = getProcess(runningProcessID);
-
     int timeRunning = readtime();
-
     prevProc->totalTime += timeRunning;
-
-
-
     //USLOSS_Console("Process %s ran for %d ms\n",prevProc->name,timeRunning);
     //USLOSS_Console("Process total %d\n",prevProc->totalTime);
-
-
     int found = 0;
     int retPID;
     //dumpQueue();
     //dumpProcesses();
 
-    USLOSS_Console("loop started\n");
+    USLOSS_Console("\n\nQueue loop started --------------------\n");
 
     for (int i = 1; i < 8; i++){
         struct Process * curProcess = runQueues[i];
         while (curProcess != NULL){
             USLOSS_Console("Process in question: %s\n",curProcess->name);
-
-            if (strcmp(curProcess->state,"Runnable") ==0){
-
-                USLOSS_Console("does this error\n");
+            if (strcmp(curProcess->state,"Runnable") == 0){
+                USLOSS_Console("Process: \"%s\" is Runnable.\n", curProcess->name);
                 runProcess(curProcess->PID);
                 return;
-
             }
-            
             curProcess = curProcess->nextQueueNode;
-
         }
         USLOSS_Console("priority %d has no runnable process\n",i);
-
-        //USLOSS_Console("iteration: %d\n",i);
     }
-
-
 }
 
 
@@ -185,15 +170,14 @@ int isZapped(){
 }
 
 void blockMe(int block_status){
+    USLOSS_Console("Blocked PID: %d\n", getpid());
     (processTable[runningProcessID % MAXPROC]).state = "Blocked";
     dispatcher();
 }
 
 int unblockProc(int pid){
-    
-    USLOSS_Console("hello");
-    (processTable[pid % MAXPROC]).state = 'Runnable';
-    USLOSS_Console("hello");
+    USLOSS_Console("Unblocked PID: %d\n", pid);
+    (processTable[pid % MAXPROC]).state = "Runnable";
     dispatcher();
     return 0;
 }
@@ -482,7 +466,8 @@ int join(int *status) {
 
     USLOSS_Console("Blocked\n");
     blockMe(0);
-
+    // dumpProcesses();
+    USLOSS_Console("RETURNING -2 HERE\n");
     return -2; 
 }
 

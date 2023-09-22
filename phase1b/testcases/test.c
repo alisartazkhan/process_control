@@ -5,8 +5,7 @@
 
 int XXp1(char *), XXp2(char *);
 
-int testcase_main()
-{
+int testcase_main(){
     int status, pid1, pid2, kidpid;
 
     USLOSS_Console("testcase_main(): started\n");
@@ -18,26 +17,25 @@ int testcase_main()
     USLOSS_Console("testcase_main(): after fork of child %d -- you should see this before XXp2 runs.\n", pid2);
 
     USLOSS_Console("testcase_main(): performing first join\n");
+    dumpProcesses();
     kidpid = join(&status);
+    dumpProcesses();
     if (kidpid != pid1 || status != 3)
     {
         USLOSS_Console("ERROR: kidpid %d status %d\n", kidpid,status);
         USLOSS_Halt(1);
     }
     USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
-
     USLOSS_Console("testcase_main(): performing second join -- you should see this before XXp2 runs.\n");
 
-
-
     kidpid = join(&status);
-
-
+    dumpProcesses();
     if (kidpid != pid2 || status != 5)
     {
-        USLOSS_Console("ERROR: kidpid %d status %d\n", kidpid,status);
+        USLOSS_Console("ERROR: kidpid %d status %d\n", kidpid, status);
         USLOSS_Halt(1);
     }
+
     USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
 
     return 0;
