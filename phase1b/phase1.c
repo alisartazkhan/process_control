@@ -515,8 +515,9 @@ void quit(int status) {
 
     USLOSS_Console("parentID = %d\n",parentID);
     unblockProc(parentID);
-
     dispatcher();
+    // when i quit, i will wake up parent if they are bklocked in join, not blocked in zapped.
+    // wake up: remove from blocked to runnable
 }
 
 void removeNode(struct Process * p){
