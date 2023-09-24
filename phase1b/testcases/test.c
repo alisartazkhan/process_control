@@ -1,72 +1,99 @@
+/*
+ * This test checks to see if a process puts processes blocked on join
+ * and blocked on zap back to the ready list:
+ *
+ *                                         fork
+ *           _____ XXp1 (priority = 3)  ----------- XXp3 (priority = 5)
+ *          /                                     |
+ *  testcase_main                               zap      |
+ *          \____ XXp2 (priority = 4) ------------- 
+ *
+ */
+
 #include <stdio.h>
 #include <usloss.h>
 #include <phase1.h>
-#include <string.h>
-#include <malloc.h>    // for malloc()
 
-int XXp1(char *);
+int XXp1(char *), XXp2(char *), XXp3(char *);
+
+int pid_e;
 
 int testcase_main()
 {
-    int status, kidpid, i, j;
+    int status, pid1, pid2, kidpid;
 
     USLOSS_Console("testcase_main(): started\n");
-    USLOSS_Console("EXPECTATION: Similar to test03 (create a few processes, join with them, do it again) - but this one will run many iterations of the loop.  Also, each child will have a tight spin loop.  And finally, dumpProcesses() will be called from a child instead of testcase_main().\n");
+    USLOSS_Console("EXPECTATION: testcase_main() creates child XXp1(), priority 1.  It creates its own child, XXp3(), priority 3.  It stores the pid of the XXp3() child into a global, and then blocks on join().  testcase_main() wakes up and creates another child, XXp2(), priority 2.  This calls zap() on the pid stored in the global variable, meaning that *two* processes are now blocked on the same XXp3().  XXp3() and testcase_main() race; XXp3() will call dumpProcesses() and die, while testcase_main() will join().  When XXp3() dies, XXp1() and XXp2() will both be awoken but XXp1() will run first.\n");
 
-    for (j = 0; j < 2; j++) {
-        for (i = 0; i < 5; i++) {
-            char *arg_buf = malloc(20);
-            sprintf(arg_buf, "XXp1_%d", i);
+    USLOSS_Console("testcase_main(): fork first child -- this will block, because the child has a higher priority\n");
+    pid1 = fork1("XXp1", XXp1, "XXp1", USLOSS_MIN_STACK, 1);
 
-            USLOSS_Console("testcase_main(): calling fork(), arg_buf = '%s' -- testcase_main() will block until this child terminates, because the child is higher priority.\n", arg_buf);
-            dumpProcesses();
+    USLOSS_Console("\n\nPRINTING HERE_________________\n");
 
-            kidpid = fork1("XXp1", XXp1, arg_buf, USLOSS_MIN_STACK, 2);
-            USLOSS_Console("testcase_main(): after fork of child %d -- you should not see this until the child has ended.\n", kidpid);
-        }
-        dumpProcesses();
-        USLOSS_Console("\nIn the output above, you should have seen 5 children be created, with dumpProcesses() called while the 4th was running.  They should all be done now.  I will now call join() on all 5.\n\n");
+    dumpProcesses();
+    USLOSS_Console("testcase_main(): after fork of child %d -- you should not see this until XXp1() is blocked in join().\n", pid1);
 
-        for (i = 0; i < 5; i++) {
-            kidpid = join (&status);
-            if (kidpid < 0)
-            {
-                USLOSS_Console("ERROR: testcase_main(): join() failed!!!  rc=%d\n", kidpid);
-                USLOSS_Halt(1);
-            }
-            USLOSS_Console("testcase_main(): after join of child %d, status = %d\n",
-                           kidpid, status);
-        }
+    USLOSS_Console("testcase_main(): fork second child -- this will block, because the child has a higher priority\n");
+    pid2 = fork1("XXp2", XXp2, "XXp2", USLOSS_MIN_STACK, 2);
+    USLOSS_Console("testcase_main(): after fork of child %d -- you should not see this until XXp2() is blocked in zap().  Depending on your scheduling decisions, XXp3() *might* run before you see this message, too.\n", pid2);
 
-        if (join(&status) != -2)
-        {
-            USLOSS_Console("ERROR: testcase_main(): join() after all of the children have been cleaned up worked, when it was supposed to return -2!!!  rc=%d\n", kidpid);
-            USLOSS_Halt(1);
-        }
-    }
+    USLOSS_Console("testcase_main(): performing join\n");
+    kidpid = join(&status);
+    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
+
+    USLOSS_Console("testcase_main(): performing join\n");
+    kidpid = join(&status);
+    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
+
     return 0;
 }
 
 int XXp1(char *arg)
 {
-    int i;
+    int status, kidpid;
 
-    USLOSS_Console("XXp1(): %s, started, pid = %d\n", arg, getpid());
-    if ( strcmp(arg, "XXp1_3") == 0 ) {
-        for (i = 0; i < 10000000; i++)
-            if ( i == 7500000)
-            {
-                USLOSS_Console("\nCalling dumpProcesses(), from inside one of the XXp1() children.  At this point, there should be 3 terminated (but not joined) children, plus me (the running child).  testcase_main() should be runnable, but obviously not running right now.\n****************\n");
-                dumpProcesses();
-                USLOSS_Console("******** end dumpProcessess() ********\n\n");
-            }
-    }
-    else {
-       for (i = 0; i < 10000000; i++)
-           ;
-    }
+    USLOSS_Console("XXp1(): started\n");
+    USLOSS_Console("XXp1(): arg = '%s'\n", arg);
 
-    USLOSS_Console("XXp1(): exiting, pid = %d\n", getpid());
-    quit(getpid());
+    USLOSS_Console("XXp1(): executing fork of child\n");
+    pid_e = fork1("XXp3", XXp3, "XXp3", USLOSS_MIN_STACK, 3);
+    USLOSS_Console("XXp1(): fork1 of child returned pid = %d\n", pid_e);
+
+    USLOSS_Console("XXp1(): joining with child -- when we block here, testcase_main() should wake up so that it can create its second child.\n");
+    USLOSS_Console("\n\nPRINTING HERE_________________\n");
+
+    dumpProcesses();
+    kidpid = join(&status);
+    USLOSS_Console("XXp1(): join returned kidpid = %d, status = %d\n", kidpid, status);
+
+    dumpProcesses();
+
+    quit(3);
+}
+
+int XXp2(char *arg)
+{
+    USLOSS_Console("XXp2(): started\n");
+
+    USLOSS_Console("XXp2(): zap'ing XXp1's child with pid_e=%d -- when we block here, testcase_main() and XXp3() will race.\n", pid_e);
+    USLOSS_Console("\n\nPRINTING HERE_________________\n");
+
+    dumpProcesses();
+    zap(pid_e);
+    USLOSS_Console("XXp2(): after zap'ing child with pid_e\n");
+
+    dumpProcesses();
+
+    quit(5);
+}
+
+int XXp3(char *arg)
+{
+    USLOSS_Console("XXp3(): started\n");
+
+    dumpProcesses();
+
+    USLOSS_Console("XXp3(): terminating -- quit() should wake up both XXp1() and XXp2(), but you should see XXp1() run first, because it has a higher priority than XXp2().\n");
+    quit(5);
 }
 
