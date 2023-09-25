@@ -223,7 +223,20 @@ void dispatcher(){
 
     for (int i = 1; i < 8; i++){
         struct Process * curProcess = runQueues[i];
-        
+        // check if there is a zapped process, if so, run that
+        while (curProcess != NULL){
+            //USLOSS_Console("Process in question: %s\n",curProcess->name);
+            
+            if (strcmp(curProcess->state,"Runnable") == 0 && curProcess -> zapHead != NULL){
+                // USLOSS_Console("Process: \"%s\" is Runnable.\n", curProcess->name);
+                // USLOSS_Console("TARGET_ZAP_PID: %d\n", TARGET_ZAP_PID);
+                runProcess(curProcess->PID);
+                return;
+            }
+            curProcess = curProcess->nextQueueNode;
+        }
+
+        curProcess = runQueues[i];
         while (curProcess != NULL){
             //USLOSS_Console("Process in question: %s\n",curProcess->name);
             
