@@ -29,6 +29,8 @@ int pidCounter = 1;
 int clockTicks = 0;
 int ZAP_STATUS = 15;
 int JOIN_BLOCK_STATUS = 20;
+int ZAP_QUIT = 0;
+int PREV_RUNNING_PID = -1;
 
 
 /*
@@ -145,7 +147,7 @@ void runProcess(int pid){
     struct Process* oldProc = getProcess(runningProcessID); 
     // USLOSS_Console("%s STATE IN RUN PROC(): %s\n", oldProc->name, oldProc-> state);
 
-    if (strcmp(oldProc->state,"Terminated") != 0 && strcmp(oldProc->state,"Blocked") != 0 && strcmp(oldProc->state,"Blocked(waiting for zap target to quit)") != 0 ){
+    if (strcmp(oldProc->state,"Terminated") != 0 && strcmp(oldProc->state,"Blocked(waiting for child to quit)") != 0 && strcmp(oldProc->state,"Blocked(waiting for zap target to quit)") != 0 ){
         // USLOSS_Console("Process hasnot been terminated\n");
         oldProc -> state = "Runnable";
     }
@@ -205,22 +207,35 @@ void dispatcher(){
     USLOSS_PsrSet(ps);
 }
 
+// Unblock all zappers of a process
+void unblockZappers(struct Process* target) {
+  
+  struct Process* cur = target->zapHead;
+  
+  while (cur != NULL) {
+    cur->state = "Runnable";
+    cur = cur->nextZapNode; 
+  }
+
+}
 
 void zap(int pid){
     int old_psr = USLOSS_PsrGet();
     USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
 
     struct Process* target = getProcess(pid);
-    if (strcmp(target->state, "Runnable") == 0){
-        struct Process* curProc = getProcess(getpid());
-        curProc -> state = "Runnable";
-        runningProcessID = target->PID;
-        USLOSS_Console("DUMPROCESS IN ZAP() in IF STATETEMENT: _------_--____--_-_[_--_____--\n");
-        dumpProcesses();
-        quit(5);
-        return;
-    }
+    // if (strcmp(target->state, "Runnable") == 0){
+    //     // struct Process* curProc = getProcess(getpid());
+    //     // curProc -> state = "Runnable";
+    //     // runningProcessID = target->PID;
+
+    //     ZAP_QUIT = 1;
+    //     PREV_RUNNING_PID = getpid();
+    //     quit(5);
+    //     return;
+    // } 
     
+    // add zapper to target's zap list
     if (target->zapHead != NULL){
         struct Process* oldHead = target -> zapHead;
         target -> zapHead = getProcess(getpid());
@@ -232,14 +247,13 @@ void zap(int pid){
     struct Process* curProc = getProcess(getpid());
     curProc -> iZap = target;
 
-    curProc -> state = "Runnable";
-    runningProcessID = pid;
-    USLOSS_Console("DUMPROCESS IN ZAP(): _------_--____--_-_[_--_____--\n");
+    //curProc -> state = "Runnable";
+    //runningProcessID = pid;
 
-    dumpProcesses();
-    blockMe(ZAP_STATUS);
 
     USLOSS_PsrSet(old_psr);
+    blockMe(ZAP_STATUS);
+
 }
 
 
@@ -258,13 +272,14 @@ void blockMe(int block_status){
         (processTable[runningProcessID % MAXPROC]).state = "Blocked(waiting for zap target to quit)";
     }
     else if (block_status == JOIN_BLOCK_STATUS){
-        (processTable[runningProcessID % MAXPROC]).state = "Blocked";
+        (processTable[runningProcessID % MAXPROC]).state = "Blocked(waiting for child to quit)";
     }
     else {
         USLOSS_Console("ERROR: BlockME has incorrect block status!");
         USLOSS_Halt(1);
     }
-    //USLOSS_Console("Blocked PID: %d\n", getpid());
+    // USLOSS_Console("INSIDE BLOCKME: \n");
+    // dumpProcesses();
     dispatcher();
 }
 
@@ -684,6 +699,14 @@ void quit(int status) {
     }
 
     //USLOSS_Console("parentID = %d\n",parentID);
+    if (ZAP_QUIT && PREV_RUNNING_PID >= 0){
+        //getProcess(PREV_RUNNING_PID)->state = "Running";
+
+        runningProcessID = PREV_RUNNING_PID;
+        ZAP_QUIT = 0;
+        PREV_RUNNING_PID = -1;
+
+    }
     unblockProc(parentID);
     dispatcher();
     // when i quit, i will wake up parent if they are bklocked in join, not blocked in zapped.
