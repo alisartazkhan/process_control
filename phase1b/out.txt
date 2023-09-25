@@ -3,31 +3,37 @@ phase3_start_service_processes() called -- currently a NOP
 phase4_start_service_processes() called -- currently a NOP
 phase5_start_service_processes() called -- currently a NOP
 testcase_main(): started
-EXPECTATION: See test13.  This is the same, except that the PID that will be zap()ed is that of XXp1() - and thus the pid is stored by testcase_main() after the first fork().  This works much the same, except that when XXp3() terminates, only XXp1() wakes up (join) because XXp2() is trying to zap XXp1(), instead of XXp3() (as it did in test 13).
+QUICK SUMMARY: Create 3 children; some of them create grandchildren; one of them tries to zap() its sibling.  Because of complex interactions of blocking and priorities, the sequence of events in the testcase is quite complex.
+testcase_main(): after fork of child 4
+testcase_main(): after fork of child 5
+testcase_main(): after fork of child 6
+testcase_main(): performing first join
 XXp1(): started
 XXp1(): arg = 'XXp1'
-XXp1(): executing fork of first child
-XXp1(): fork1 of first child returned pid = 5
-XXp1(): joining with first child
-testcase_main(): after fork of first child 4
+XXp4(): started
+XXp4(): arg = 'XXp4FromXXp1' -- this process will terminate immediately.
+XXp1(): after fork of child 7
+XXp1(): performing join
+XXp1(): exit status for child 7 is 4
 XXp2(): started
-XXp2(): zap'ing process with pid_z=4
-testcase_main(): after fork of second child 6
-testcase_main(): performing join
+XXp2(): arg = 'XXp2'
+XXp2(): calling zap(6)
 XXp3(): started
- PID  PPID  NAME              PRIORITY  STATE
-   1     0  init              6         Runnable
-   2     1  sentinel          7         Runnable
-   3     1  testcase_main     3         Blocked(waiting for child to quit)
-   4     3  XXp1              1         Blocked(waiting for child to quit)
-   5     4  XXp3              3         Running
-   6     3  XXp2              2         Blocked(waiting for zap target to quit)
-XXp3(): terminating -- quit() should wake up XXp1() but XXp2() will continue to block, since it is zapping XXp1() instead of XXp3(), as it did in test13.
-XXp1(): join returned kidpid = 5, status = 5
-XXp1(): terminating -- when this happens, XXp2() will become runnable, and so XXp2() will finish up before testcase_main() runs again.
-XXp2(): after zap'ing process with pid_z
-XXp2(): terminating
-testcase_main(): exit status for child 6 is 5
-testcase_main(): performing join
-testcase_main(): exit status for child 4 is 3
+XXp3(): arg = 'XXp3'
+XXp4(): started
+XXp4(): arg = 'XXp4FromXXp3a' -- this process will terminate immediately.
+XXp3(): after fork of child 8
+XXp4(): started
+XXp4(): arg = 'XXp4FromXXp3b' -- this process will terminate immediately.
+XXp3(): after fork of child 9
+XXp3(): performing first join
+XXp3(): exit status for child 9 is 4
+XXp3(): performing second join
+XXp3(): exit status for child 8 is 4
+testcase_main(): exit status for child 6 is 3
+testcase_main(): performing second join
+testcase_main(): exit status for child 4 is 1
+testcase_main(): performing third join
+XXp2(): zap(6) returned
+testcase_main(): exit status for child 5 is 2
 TESTCASE ENDED: Call counts:   check_io() 0   clockHandler() 0

@@ -334,42 +334,28 @@ void blockMe(int block_status){
     }
     else if (block_status == JOIN_BLOCK_STATUS){
         (processTable[runningProcessID % MAXPROC]).state = "Blocked(waiting for child to quit)";
-                removeNode(getProcess(getpid()));
+        removeNode(getProcess(getpid()));
 
     }
     else if (block_status <= 10){
-
         USLOSS_Console("ERROR: BlockME has incorrect block status!");
         USLOSS_Halt(1);
 }
     else {
         (processTable[runningProcessID % MAXPROC]).state = "Blocked";
         (processTable[runningProcessID % MAXPROC]).status = block_status;
-                removeNode(getProcess(getpid()));
+        removeNode(getProcess(getpid()));
 
 
 
     }
     // USLOSS_Console("Blocked PID: %d in blockMe()\n", getpid());
     // dumpProcesses();
+    // dumpQueue();
     dispatcher();
 }
 
-void addToQueue1(int pid){
-    int priority = getProcess(pid)->priority;
-    int slot = pid % MAXPROC;
 
-// adding to the Queue
-    if (runQueues[priority] == NULL){
-        struct Process* new = &processTable[slot];
-        runQueues[priority] = new;
-    } else{
-        struct Process* curProc = runQueues[priority];
-        while (curProc->nextQueueNode!= NULL){curProc = curProc->nextQueueNode;}
-        curProc -> nextQueueNode = &processTable[slot];
-        (&processTable[slot])->prevQueueNode = curProc;
-    }
-}
 
 int unblockProc(int pid){
     // USLOSS_Console("Unblocked PID: %d\n", pid);
@@ -799,25 +785,28 @@ void quit(int status) {
 // Function to add a node to the end of the doubly linked list
 void addToQueue(struct Process* nodeToAppend) {
     // USLOSS_Console("\n\nInside ADD Node\n");
-    //     printProcess(nodeToAppend->PID);
-    //         dumpQueue();
+    // printProcess(nodeToAppend->PID);
+    // dumpQueue();
 
 
 
-    struct Process* head = runQueues[nodeToAppend->priority];
-    if (head == NULL) {
+    struct Process* current = runQueues[nodeToAppend->priority];
+    if (current == NULL) {
+        // USLOSS_Console("Head is NULL\n");
         runQueues[nodeToAppend->priority] = nodeToAppend;
     } else {
-        struct Process* current = head;
+        
         while (current->nextQueueNode != NULL) {
+            if (current == nodeToAppend){return;}
             current = current->nextQueueNode;
+
         }
         current->nextQueueNode = nodeToAppend;
         nodeToAppend->prevQueueNode = current;
         nodeToAppend -> nextQueueNode = NULL;
     }
     // dumpQueue();
-        // USLOSS_Console("\n END OF ADD Node\n");
+    //     USLOSS_Console("\n END OF ADD Node\n");
 
 }
 
