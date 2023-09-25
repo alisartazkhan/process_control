@@ -74,7 +74,7 @@ int XXp2(char *arg)
 
     dumpProcesses();
 
-    quit(5);
+    quit(5); 
 }
 
 int XXp3(char *arg)

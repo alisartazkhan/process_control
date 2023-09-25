@@ -27,9 +27,8 @@
 int runningProcessID = -1;
 int pidCounter = 1;
 int clockTicks = 0;
-int ZAP_STATUS = 15;
-int JOIN_BLOCK_STATUS = 20;
-
+int ZAP_STATUS = 150000;
+int JOIN_BLOCK_STATUS = 20000;
 
 /*
     Struct that represents an individual process. Each field represents an
@@ -95,6 +94,7 @@ void trampoline();
 struct Process* getProcess(int);
 int init_main(char*);
 void removeNode(struct Process*);
+void addToQueue(struct Process*);
 
 void printChildren(struct Process* parent){
     struct Process* curChild = parent->firstChild;
@@ -122,6 +122,7 @@ void dumpProcessesUS(void){
 
 }
 
+
 void runProcess(int pid){
     //USLOSS_Console("name of process running : %s\n",getProcess(pid)->name);
 
@@ -145,11 +146,17 @@ void runProcess(int pid){
     struct Process* oldProc = getProcess(runningProcessID); 
     // USLOSS_Console("%s STATE IN RUN PROC(): %s\n", oldProc->name, oldProc-> state);
 
-    if (strcmp(oldProc->state,"Terminated") != 0 && strcmp(oldProc->state,"Blocked") != 0 && strcmp(oldProc->state,"Blocked(waiting for zap target to quit)") != 0 ){
+
+    // if (strcmp(oldProc->state,"Terminated") != 0 && strcmp(oldProc->state,"Blocked(waiting for child to quit)") != 0 && strcmp(oldProc->state,"Blocked(waiting for zap target to quit)") != 0 && strcmp(oldProc->state,"Blocked") != 0){
+    //     // USLOSS_Console("Process hasnot been terminated\n");
+    //     oldProc -> state = "Runnable";
+    //     //setZappedVarVar(oldProc->PID);
+    // }
+    if (strcmp(oldProc->state,"Running") == 0 ){
         // USLOSS_Console("Process hasnot been terminated\n");
         oldProc -> state = "Runnable";
+        //setZappedVarVar(oldProc->PID);
     }
-
     
     struct Process* newProc = getProcess(pid); 
 
@@ -159,6 +166,33 @@ void runProcess(int pid){
     runningProcessID = pid;
     newProc->startTime = currentTime();
     //USLOSS_Console("%s is running.\n", newProc -> name);
+
+
+
+    // USLOSS_Console("BEFORE REMOVE NODE\n");
+    // dumpQueue();
+    // removeNode(oldProc);
+
+
+    // int priority = oldProc->priority;
+    // int slot = oldProc->PID % MAXPROC;
+
+    // if (runQueues[priority] == NULL){
+    //     struct Process* new = &processTable[slot];
+    //     runQueues[priority] = new;
+    // } else{
+    //     struct Process* curProc = runQueues[priority];
+    //     while (curProc->nextQueueNode!= NULL){curProc = curProc->nextQueueNode;}
+    //     curProc -> nextQueueNode = &processTable[slot];
+    //     (&processTable[slot])->prevQueueNode = curProc;
+    //     curProc->nextQueueNode = NULL;
+    // }
+
+    // USLOSS_Console("After REMOVE NODE\n");
+    // dumpQueue();
+
+
+
     USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, 
     &(processTable[pid % MAXPROC].context));
 
@@ -186,14 +220,16 @@ void dispatcher(){
     //dumpQueue();
     //dumpProcesses();
 
-    //USLOSS_Console("\n\nQueue loop started --------------------\n");
 
     for (int i = 1; i < 8; i++){
         struct Process * curProcess = runQueues[i];
+        
         while (curProcess != NULL){
             //USLOSS_Console("Process in question: %s\n",curProcess->name);
+            
             if (strcmp(curProcess->state,"Runnable") == 0){
                 // USLOSS_Console("Process: \"%s\" is Runnable.\n", curProcess->name);
+                // USLOSS_Console("TARGET_ZAP_PID: %d\n", TARGET_ZAP_PID);
                 runProcess(curProcess->PID);
                 return;
             }
@@ -208,38 +244,49 @@ void dispatcher(){
 
 void zap(int pid){
     int old_psr = USLOSS_PsrGet();
-    USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+     USLOSS_PsrSet(old_psr & ~USLOSS_PSR_CURRENT_INT);
+    struct Process* target = getProcess(pid); // Process getting zapped
 
-    struct Process* target = getProcess(pid);
-    if (strcmp(target->state, "Runnable") == 0){
-        struct Process* curProc = getProcess(getpid());
-        curProc -> state = "Runnable";
-        runningProcessID = target->PID;
-        USLOSS_Console("DUMPROCESS IN ZAP() in IF STATETEMENT: _------_--____--_-_[_--_____--\n");
-        dumpProcesses();
-        quit(5);
-        return;
+
+    if(pid == 1){
+        USLOSS_Console("ERROR: Attempt to zap() init.\n");
+        USLOSS_Halt(1);
     }
+    if(pid <= 0){
+        USLOSS_Console("ERROR: Attempt to zap() a PID which is <=0.  other_pid = %d\n",pid);
+        USLOSS_Halt(1);
+    }
+    if(pid == runningProcessID){
+        USLOSS_Console("ERROR: Attempt to zap() itself.\n");
+        USLOSS_Halt(1);
+    }
+    if (target->isInitialized == 0 || pid != target->PID){
+        USLOSS_Console("ERROR: Attempt to zap() a non-existent process.\n");
+        USLOSS_Halt(1);
+    }
+    if (strcmp(target->state,"Terminated") == 0){
+        USLOSS_Console("ERROR: Attempt to zap() a process that is already in the process of dying.\n");
+        USLOSS_Halt(1);
+    }
+
+    // adding zappers to target's zap list
+     if (target->zapHead != NULL){
+         struct Process* oldHead = target -> zapHead;
+         target -> zapHead = getProcess(getpid());
+         target -> zapHead -> nextZapNode = oldHead;
+     } else {
+         target -> zapHead = getProcess(getpid());
+     }
+
+    // setting which process that current process zaps
+    struct Process* runningProc = getProcess(getpid());
+    runningProc -> iZap = target;
+
     
-    if (target->zapHead != NULL){
-        struct Process* oldHead = target -> zapHead;
-        target -> zapHead = getProcess(getpid());
-        target -> zapHead -> nextZapNode = oldHead;
-    } else {
-        target -> zapHead = getProcess(getpid());
-    }
-
-    struct Process* curProc = getProcess(getpid());
-    curProc -> iZap = target;
-
-    curProc -> state = "Runnable";
-    runningProcessID = pid;
-    USLOSS_Console("DUMPROCESS IN ZAP(): _------_--____--_-_[_--_____--\n");
-
-    dumpProcesses();
     blockMe(ZAP_STATUS);
-
     USLOSS_PsrSet(old_psr);
+
+
 }
 
 
@@ -256,22 +303,53 @@ int isZapped(){
 void blockMe(int block_status){
     if (block_status == ZAP_STATUS){
         (processTable[runningProcessID % MAXPROC]).state = "Blocked(waiting for zap target to quit)";
+        removeNode(getProcess(getpid()));
     }
     else if (block_status == JOIN_BLOCK_STATUS){
-        (processTable[runningProcessID % MAXPROC]).state = "Blocked";
+        (processTable[runningProcessID % MAXPROC]).state = "Blocked(waiting for child to quit)";
+                removeNode(getProcess(getpid()));
+
     }
-    else {
+    else if (block_status <= 10){
+
         USLOSS_Console("ERROR: BlockME has incorrect block status!");
         USLOSS_Halt(1);
+}
+    else {
+        (processTable[runningProcessID % MAXPROC]).state = "Blocked";
+        (processTable[runningProcessID % MAXPROC]).status = block_status;
+                removeNode(getProcess(getpid()));
+
+
+
     }
-    //USLOSS_Console("Blocked PID: %d\n", getpid());
+    // USLOSS_Console("Blocked PID: %d in blockMe()\n", getpid());
+    // dumpProcesses();
     dispatcher();
 }
 
+void addToQueue1(int pid){
+    int priority = getProcess(pid)->priority;
+    int slot = pid % MAXPROC;
+
+// adding to the Queue
+    if (runQueues[priority] == NULL){
+        struct Process* new = &processTable[slot];
+        runQueues[priority] = new;
+    } else{
+        struct Process* curProc = runQueues[priority];
+        while (curProc->nextQueueNode!= NULL){curProc = curProc->nextQueueNode;}
+        curProc -> nextQueueNode = &processTable[slot];
+        (&processTable[slot])->prevQueueNode = curProc;
+    }
+}
 
 int unblockProc(int pid){
-    //USLOSS_Console("Unblocked PID: %d\n", pid);
-    (processTable[pid % MAXPROC]).state = "Runnable";
+    // USLOSS_Console("Unblocked PID: %d\n", pid);
+    getProcess(pid) -> state =  "Runnable";
+
+    addToQueue(getProcess(pid));
+    
     dispatcher();
     return 0;
 }
@@ -381,16 +459,7 @@ int stackSize, int priority) {
     strcpy(processTable[slot].name, name);
     processTable[slot].name[MAXNAME - 1] = '\0';
 
-    // adding to the Queue
-    if (runQueues[priority] == NULL){
-        struct Process* new = &processTable[slot];
-        runQueues[priority] = new;
-    } else{
-        struct Process* curProc = runQueues[priority];
-        while (curProc->nextQueueNode!= NULL){curProc = curProc->nextQueueNode;}
-        curProc -> nextQueueNode = &processTable[slot];
-        (&processTable[slot])->prevQueueNode = curProc;
-    }
+    addToQueue(&processTable[slot]);
 
     USLOSS_ContextInit(&(processTable[slot].context),
     processTable[slot].stack, stackSize, NULL, trampoline);
@@ -565,6 +634,9 @@ int priority) {
 
     // printProcess(parent->PID);
     parent -> state = "Runnable";
+    //setZappedVarVar(parent->PID);
+
+    
 
     dispatcher();
 
@@ -649,7 +721,6 @@ int join(int *status) {
 void quit(int status) {
 
     //USLOSS_Console("quit called\n");
-    // USLOSS_Console("RUNNING PID IN QUIT(): __________%d\n", getpid());
 
     int mode = USLOSS_PsrGet() & USLOSS_PSR_CURRENT_MODE;
     if (mode != USLOSS_PSR_CURRENT_MODE) {
@@ -676,47 +747,76 @@ void quit(int status) {
 
     int parentID = curProcess->parent->PID;
 
+    // Setting list of zappers from blocked to runnable
     struct Process* curProc = curProcess -> zapHead;
     while (curProc != NULL){
-        curProc -> state = "Runnable";
-
+        if (strcmp(curProc->state, "Terminated") != 0){
+            curProc -> state = "Runnable";
+            addToQueue(curProc);
+        }
         curProc = curProc -> nextZapNode;
+        
     }
 
     //USLOSS_Console("parentID = %d\n",parentID);
+    // USLOSS_Console("PROC: %s ENDED IN QUIT()\n", getProcess(getpid()) -> name);
+
     unblockProc(parentID);
-    dispatcher();
+    // dispatcher();
     // when i quit, i will wake up parent if they are bklocked in join, not blocked in zapped.
     // wake up: remove from blocked to runnable
 }
 
-void removeNode(struct Process * p){
-    int priority = p->priority;
 
-    struct Process* curProcess = runQueues[priority];
 
-    if(curProcess == p && p->nextQueueNode==NULL){
-        runQueues[priority] = NULL;
+// Function to add a node to the end of the doubly linked list
+void addToQueue(struct Process* nodeToAppend) {
+    // USLOSS_Console("\n\nInside ADD Node\n");
+    //     printProcess(nodeToAppend->PID);
+    //         dumpQueue();
+
+
+
+    struct Process* head = runQueues[nodeToAppend->priority];
+    if (head == NULL) {
+        runQueues[nodeToAppend->priority] = nodeToAppend;
+    } else {
+        struct Process* current = head;
+        while (current->nextQueueNode != NULL) {
+            current = current->nextQueueNode;
+        }
+        current->nextQueueNode = nodeToAppend;
+        nodeToAppend->prevQueueNode = current;
+        nodeToAppend -> nextQueueNode = NULL;
     }
+    // dumpQueue();
+        // USLOSS_Console("\n END OF ADD Node\n");
 
-    else if (curProcess == p && p->nextQueueNode != NULL){
-        runQueues[priority] = p->nextQueueNode;
-
-
-    }
-    // if (curProcess != NULL && curProcess->PID == pid){
-    //     runQueues[priority] = curProcess -> nextQueueNode;
-    //     curProcess -> nextQueueNode -> prevQueueNode = NULL;
-    // }
-    // else{
-    //     while (curProcess != NULL && curProcess->PID != pid){curProcess = curProcess -> nextQueueNode;}
-
-    //     struct Process* prevNode = curProcess -> prevQueueNode;
-    //     struct Process* nextNode = curProcess -> nextQueueNode;
-    //     prevNode -> nextQueueNode = nextNode;
-    //     nextNode -> prevQueueNode = prevNode;
-    // }
 }
+
+// Function to remove a specific node from the doubly linked list
+void removeNode(struct Process* nodeToRemove) {
+    if (runQueues[nodeToRemove->priority] == NULL || nodeToRemove == NULL) {
+        return; 
+    }
+    // USLOSS_Console("\n\nInside remove Node\n");
+    // printProcess(nodeToRemove->PID);
+    // dumpQueue();
+    if (nodeToRemove->prevQueueNode != NULL) {
+        nodeToRemove->prevQueueNode->nextQueueNode = nodeToRemove->nextQueueNode;
+    }
+    if (nodeToRemove->nextQueueNode != NULL) {
+        nodeToRemove->nextQueueNode->prevQueueNode = nodeToRemove->prevQueueNode;
+    }
+    if (runQueues[nodeToRemove->priority] == nodeToRemove) {
+        runQueues[nodeToRemove->priority] = nodeToRemove->nextQueueNode;
+    }
+    // dumpQueue();
+
+    // USLOSS_Console("END OF remove Node\n\n");
+
+}
+
 
 /*
     Description: returns the PID of current process from the global variable
@@ -752,32 +852,6 @@ void startProcesses(void) {
     //runProcess(1);
 
 }
-
-
-
-/*
-    Description: sets the current process to runnable, next process to 
-    running, and the context switches to the next process given by the pid.
-
-    Arg: int pid: pid of process to switch to
-
-    return; none
-*/
-// void TEMP_switchTo(int pid) {
-
-//     struct Process* oldProc = getProcess(runningProcessID); 
-//     oldProc -> state = "Runnable";
-//     struct Process* newProc = getProcess(pid); 
-
-//     newProc -> state = "Running";   
-//     int prevID = runningProcessID; 
-//     runningProcessID = pid;
-
-
-//     USLOSS_ContextSwitch(&processTable[prevID % MAXPROC].context, 
-//     &(processTable[pid % MAXPROC].context));
-
-// }
 
 
 
@@ -826,6 +900,9 @@ void dumpProcesses(void){
             
         }
         if(strcmp(processTable[i].state,"Terminated")==0){
+                USLOSS_Console("(%d)",processTable[i].status);
+            }
+        if(strcmp(processTable[i].state,"Blocked")==0){
                 USLOSS_Console("(%d)",processTable[i].status);
             }
         USLOSS_Console("\n");

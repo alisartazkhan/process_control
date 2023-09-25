@@ -27,10 +27,6 @@ int testcase_main()
 
     USLOSS_Console("testcase_main(): fork first child -- this will block, because the child has a higher priority\n");
     pid1 = fork1("XXp1", XXp1, "XXp1", USLOSS_MIN_STACK, 1);
-
-    USLOSS_Console("\n\nPRINTING HERE_________________\n");
-
-    dumpProcesses();
     USLOSS_Console("testcase_main(): after fork of child %d -- you should not see this until XXp1() is blocked in join().\n", pid1);
 
     USLOSS_Console("testcase_main(): fork second child -- this will block, because the child has a higher priority\n");
@@ -60,9 +56,6 @@ int XXp1(char *arg)
     USLOSS_Console("XXp1(): fork1 of child returned pid = %d\n", pid_e);
 
     USLOSS_Console("XXp1(): joining with child -- when we block here, testcase_main() should wake up so that it can create its second child.\n");
-    USLOSS_Console("\n\nPRINTING HERE_________________\n");
-
-    dumpProcesses();
     kidpid = join(&status);
     USLOSS_Console("XXp1(): join returned kidpid = %d, status = %d\n", kidpid, status);
 
@@ -76,15 +69,12 @@ int XXp2(char *arg)
     USLOSS_Console("XXp2(): started\n");
 
     USLOSS_Console("XXp2(): zap'ing XXp1's child with pid_e=%d -- when we block here, testcase_main() and XXp3() will race.\n", pid_e);
-    USLOSS_Console("\n\nPRINTING HERE_________________\n");
-
-    dumpProcesses();
     zap(pid_e);
     USLOSS_Console("XXp2(): after zap'ing child with pid_e\n");
 
     dumpProcesses();
 
-    quit(5);
+    quit(5); 
 }
 
 int XXp3(char *arg)
