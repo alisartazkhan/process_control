@@ -723,6 +723,7 @@ void addToQueue(struct Process* nodeToAppend) {
     } else {
         struct Process* current = head;
         while (current->nextQueueNode != NULL) {
+            if (current == nodeToAppend){return;}
             current = current->nextQueueNode;
         }
         current->nextQueueNode = nodeToAppend;

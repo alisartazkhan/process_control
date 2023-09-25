@@ -1,87 +1,142 @@
-/*
- * This test checks to see if a process returns -1 in join if it was 
- * zapped while waiting:
- *
- *                                        fork
- *          _____ XXp1 (priority = 3)  ----------- XXp3 (priority = 5)
- *         /                 |
- * testcase_main                    | zap
- *         \____ XXp2 (priority = 4) 
- *
-*/
-
-
 #include <stdio.h>
 #include <usloss.h>
 #include <phase1.h>
 
-int XXp1(char *), XXp2(char *), XXp3(char *);
-int pid_z;
+/*
+ * The purpose of this test is to test when we join and our children have
+ * already quit.  One will be done where we have been zapped before calling
+ * join, one will be done where we have not been zapped before calling join.
+ *
+ * Expected output:
+ *
+ * testcase_main(): started
+ * testcase_main(): after fork of child 3
+ * testcase_main(): after fork of child 4
+ * testcase_main(): after fork of child 5
+ * testcase_main(): performing first join
+ * XXp1(): started
+ * XXp1(): arg = 'XXp1'
+ * XXp4(): started
+ * XXp4(): arg = 'XXp4FromXXp1'
+ * XXp2(): started
+ * XXp2(): arg = 'XXp2'
+ * XXp2(): calling zap(5)
+ * XXp3(): started
+ * XXp3(): arg = 'XXp3'
+ * XXp4(): started
+ * XXp4(): arg = 'XXp4FromXXp3a'
+ * XXp1(): after fork of child 6
+ * XXp1(): performing first join
+ * XXp1(): exit status for child 6 is -4
+ * testcase_main(): exit status for child 3 is -1
+ * testcase_main(): performing second join
+ * XXp3(): after fork of child 7
+ * XXp4(): started
+ * XXp4(): arg = 'XXp4FromXXp3b'
+ * XXp3(): after fork of child 8
+ * XXp3(): performing first join
+ * XXp3(): exit status for child -1 is -4
+ * XXp3(): performing second join
+ * XXp3(): exit status for child -1 is -4
+ * testcase_main(): exit status for child 5 is -3
+ * testcase_main(): performing third join
+ * XXp2(): return value of zap(5) is 0
+ * testcase_main(): exit status for child 4 is -2
+ * All processes completed.
+ */
+
+int  XXp1(char *), XXp2(char *), XXp3(char *), XXp4(char *);
+int  pid3;
 
 int testcase_main()
 {
-    int status, pid2, kidpid;
+    int status, pid1, pid2, kidpid;
 
     USLOSS_Console("testcase_main(): started\n");
-    USLOSS_Console("EXPECTATION: See test13.  This is the same, except that the PID that will be zap()ed is that of XXp1() - and thus the pid is stored by testcase_main() after the first fork().  This works much the same, except that when XXp3() terminates, only XXp1() wakes up (join) because XXp2() is trying to zap XXp1(), instead of XXp3() (as it did in test 13).\n");
+// TODO    USLOSS_Console("EXPECTATION: TBD\n");
+    USLOSS_Console("QUICK SUMMARY: Create 3 children; some of them create grandchildren; one of them tries to zap() its sibling.  Because of complex interactions of blocking and priorities, the sequence of events in the testcase is quite complex.\n");
 
-    pid_z = fork1("XXp1", XXp1, "XXp1", USLOSS_MIN_STACK, 1);
-    USLOSS_Console("testcase_main(): after fork of first child %d\n", pid_z);
+    pid1 = fork1("XXp1", XXp1, "XXp1", USLOSS_MIN_STACK, 3);
+    USLOSS_Console("testcase_main(): after fork of child %d\n", pid1);
 
-    pid2 = fork1("XXp2", XXp2, "XXp2", USLOSS_MIN_STACK, 2);
-    USLOSS_Console("testcase_main(): after fork of second child %d\n", pid2);
-    // dumpProcesses();
+    pid2 = fork1("XXp2", XXp2, "XXp2", USLOSS_MIN_STACK, 3);
+    USLOSS_Console("testcase_main(): after fork of child %d\n", pid2);
 
-    USLOSS_Console("testcase_main(): performing join\n");
+    pid3 = fork1("XXp3", XXp3, "XXp3", USLOSS_MIN_STACK, 3);
+    USLOSS_Console("testcase_main(): after fork of child %d\n", pid3);
+
+    USLOSS_Console("testcase_main(): performing first join\n");
     kidpid = join(&status);
-    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
+    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status);
 
-    USLOSS_Console("testcase_main(): performing join\n");
+    USLOSS_Console("testcase_main(): performing second join\n");
     kidpid = join(&status);
-    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status); 
+    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status);
+
+    USLOSS_Console("testcase_main(): performing third join\n");
+    kidpid = join(&status);
+    USLOSS_Console("testcase_main(): exit status for child %d is %d\n", kidpid, status);
 
     return 0;
 }
 
 int XXp1(char *arg)
 {
-    int status, kidpid;
+    int pid1, kidpid, status;
 
     USLOSS_Console("XXp1(): started\n");
     USLOSS_Console("XXp1(): arg = '%s'\n", arg);
+    pid1 = fork1("XXp4", XXp4, "XXp4FromXXp1", USLOSS_MIN_STACK, 1);
+    USLOSS_Console("XXp1(): after fork of child %d\n", pid1);
 
-    USLOSS_Console("XXp1(): executing fork of first child\n");
-    kidpid = fork1("XXp3", XXp3, "XXp3", USLOSS_MIN_STACK, 3);
-    USLOSS_Console("XXp1(): fork1 of first child returned pid = %d\n", kidpid);
-
-    USLOSS_Console("XXp1(): joining with first child\n" );
+    USLOSS_Console("XXp1(): performing join\n");
     kidpid = join(&status);
-    USLOSS_Console("XXp1(): join returned kidpid = %d, status = %d\n", kidpid, status);
+    USLOSS_Console("XXp1(): exit status for child %d is %d\n", kidpid, status);
 
-    USLOSS_Console("XXp1(): terminating -- when this happens, XXp2() will become runnable, and so XXp2() will finish up before testcase_main() runs again.\n");
-    quit(3);
+    quit(1);
 }
 
 int XXp2(char *arg)
 {
     USLOSS_Console("XXp2(): started\n");
+    USLOSS_Console("XXp2(): arg = '%s'\n", arg);
 
-    USLOSS_Console("XXp2(): zap'ing process with pid_z=%d\n", pid_z);
-    zap(pid_z);
-    USLOSS_Console("XXp2(): after zap'ing process with pid_z\n");
+    USLOSS_Console("XXp2(): calling zap(%d)\n", pid3);
+    zap(pid3);
+    USLOSS_Console("XXp2(): zap(%d) returned\n", pid3);
 
-    USLOSS_Console("XXp2(): terminating\n");
-    quit(5);
+    quit(2);
 }
 
 int XXp3(char *arg)
 {
+    int pid1, pid2, kidpid, status;
+
     USLOSS_Console("XXp3(): started\n");
+    USLOSS_Console("XXp3(): arg = '%s'\n", arg);
 
-    dumpProcesses();
+    pid1 = fork1("XXp4", XXp4, "XXp4FromXXp3a", USLOSS_MIN_STACK, 1);
+    USLOSS_Console("XXp3(): after fork of child %d\n", pid1);
 
-    USLOSS_Console("XXp3(): terminating -- quit() should wake up XXp1() but XXp2() will continue to block, since it is zapping XXp1() instead of XXp3(), as it did in test13.\n");
-    quit(5);
+    pid2 = fork1("XXp4", XXp4, "XXp4FromXXp3b", USLOSS_MIN_STACK, 2);
+    USLOSS_Console("XXp3(): after fork of child %d\n", pid2);
+
+    USLOSS_Console("XXp3(): performing first join\n");
+    kidpid = join(&status);
+    USLOSS_Console("XXp3(): exit status for child %d is %d\n", kidpid, status);
+
+    USLOSS_Console("XXp3(): performing second join\n");
+    kidpid = join(&status);
+    USLOSS_Console("XXp3(): exit status for child %d is %d\n", kidpid, status);
+
+    quit(3);
 }
 
+int XXp4(char *arg)
+{
+    USLOSS_Console("XXp4(): started\n");
+    USLOSS_Console("XXp4(): arg = '%s' -- this process will terminate immediately.\n", arg);
+
+    quit(4);
+}
 
