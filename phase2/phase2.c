@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "usloss.h"
+#include <usloss.h>
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
@@ -10,99 +10,115 @@
 #define MAX_SLOTS 2500
 #define MAX_MESSAGE 150
 
-typedef struct {
-  int inUse;
-  int numSlots;
+void phase2_clockHandler();
+int phase2_check_io();
+
+
+/*
+    Struct that represents an individual process. Each field represents an
+    attribute for a individual process. When a process is created, it's
+    state is switched to Ready, and all of the fields passed in by fork
+    are initialized, as well as isInitialized being set to 1. When a process
+    is called using the dispatcher and its PID, its state is switched to 
+    Running, and its startFunc is called. When a process has run to it's 
+    entirety, its state is changed to Terminated, and after it has been
+    joined, it is removed from its parent tree and its stack is freed.
+
+*/
+struct Process {
+    int isInitialized;
+    char name[MAXNAME];
+    int PID;
+    int priority;
+    bool isAlive;
+    USLOSS_Context context;
+
+    struct Process* nextSibling;
+    struct Process* prevSibling;
+    struct Process* parent;
+    struct Process* firstChild;
+
+    struct Process* queueHead;
+    struct Process* nextQueueNode;
+    struct Process* prevQueueNode;
+
+    struct Process* zapHead;
+    struct Process* nextZapNode;
+    struct Process* prevZapNode;
+    struct Process* iZap;
+
+    char* state;
+    void * stack;
+    int status;
+    bool isBlocked;
+    int isZapped;
+    bool isZombie;
+    int (*startFunc)(char*);
+    char* arg;
+    int time;
+    int startTime;
+    int endTime;
+    int totalTime;
+
+    // phase2 fields
+
+
+};
+
+
+struct MB {
+  int id;
+  Message* messages;
   int slotSize;
-  int numMessages;
-} Mbox;
+  struct Process* senderQueueHead;
+  struct Process* receiverQueueHead;
+};
 
-typedef struct {
-  int inUse;
-  void *msgPtr;
-  int msgSize;  
-} Slot;
+struct Message {
+  char* payload;
+}
 
-static int numMboxes;
-static Mbox mboxes[MAXMBOX];
+static struct Process shadowProcessTable[MAXPROC];
+static struct MB mbTable[MAXMBOX];
+static struct Message MessageTable[MAX_SLOTS];
 
-static int numSlots;
-static Slot slots[MAX_SLOTS];
+void phase2_clockHandler(){
 
-static PCB shadowProcessTable[MAXPROC]; 
+}
 
-void (*systemCallVec[MAXSYSCALLS])(USLOSS_Sysargs*);
+int phase2_check_io(){
+  return 0;
+}
+
+struct Message createMessage(int slotSize){
+
+
+}
+
+void fork(char *name, int(func)(char *), char *arg, int stacksize, int priority){
+  int pid = fork1(name, func, arg, stacksize, priority);
+
+
+}
+
 
 // Initialize mailboxes and other data structures
 void phase2_init() {
 
-  // Initialize mailboxes
-  numMboxes = 0;
-  for (int i = 0; i < MAXMBOX; i++) {
-    mboxes[i].inUse = 0;
-  }
+}
 
-  // Initialize mail slots
-  numSlots = 0; 
-  for (int i = 0; i < MAX_SLOTS; i++) {
-    slots[i].inUse = 0;
-  }
-
-  // Initialize system call handler vector
-  for (int i = 0; i < MAXSYSCALLS; i++) {
-    systemCallVec[i] = nullsys;
-  }
+void phase2_start_service_processes(){
 
 }
 
 // Create a new mailbox
 int MboxCreate(int slots, int slotSize) {
 
-  // Check for invalid arguments
-  if (slots < 0 || slots > MAXMBOX ||  
-      slotSize < 0 || slotSize > MAX_MESSAGE) {
-    return -1;
-  }
-
-  // Check if any mailboxes left
-  if (numMboxes == MAXMBOX) {
-    return -1;
-  }
-
-  // Find empty mailbox
-  int mboxId = -1;
-  for (int i = 0; i < MAXMBOX; i++) {
-    if (!mboxs[i].inUse) {
-      mboxId = i;
-      break; 
-    }
-  }
-
-  // Initialize mailbox
-  mboxes[mboxId].inUse = 1;
-  mboxes[mboxId].numSlots = slots;
-  mboxes[mboxId].slotSize = slotSize;
-  mboxes[mboxId].numMessages = 0;
-
-  // Increment mailbox count
-  numMboxes++;
-
-  return mboxId;
+  return 0;
 }
 
 // Release a mailbox
 int MboxRelease(int mboxId) {
-
-  // Check for invalid mailbox
-  if (mboxId < 0 || mboxId >= MAXMBOX || !mboxs[mboxId].inUse) {
-    return -1;
-  }
-
-  // Mark mailbox as free
-  mboxes[mboxId].inUse = 0;
-
-  // Decrement mailbox count
-  numMboxes--;
 
   return 0;
 }
@@ -110,23 +126,6 @@ int MboxRelease(int mboxId) {
 // Send message to mailbox
 int MboxSend(int mboxId, void *msgPtr, int msgSize) {
   
-  // Check for invalid args
-  if (mboxId < 0 || mboxId >= MAXMBOX ||  
-      !mboxs[mboxId].inUse ||
-      msgSize < 0 || msgSize > mboxes[mboxId].slotSize) {
-    return -1;
-  }
-
-  // Check if mailbox full
-  if (mboxs[mboxId].numMessages == mboxes[mboxId].numSlots) {
-    return -2; // mail box full
-  }
-
-  // Enqueue message in slot
-  int slotId = enqueueSlot(msgPtr, msgSize);
-
-  // Increment message count
-  mboxes[mboxId].numMessages++;
 
   return 0;
 }
@@ -134,37 +133,24 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 // Receive message from mailbox  
 int MboxRecv(int mboxId, void *msgPtr, int msgMaxSize) {
 
-  // Check for invalid args
-  if (mboxId < 0 || mboxId >= MAXMBOX ||
-      !mboxs[mboxId].inUse ||  
-      msgMaxSize < 0 || msgMaxSize > mboxes[mboxId].slotSize) {
-    return -1;
-  }
 
-  // Check if mailbox empty
-  if (mboxs[mboxId].numMessages == 0) {
-    return -2; // mailbox empty
-  }
-
-  // Dequeue message from slot
-  int msgSize = dequeueSlot(msgPtr, msgMaxSize);
-
-  // Decrement message count
-  mboxes[mboxId].numMessages--;
-
-  return msgSize;
+  return 0;
 }
 
 // Conditional send
-int MboxCondSend(...) {
+int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
   // Implementation similar to MboxSend but 
   // returns -2 instead of blocking if full
+
+  return 0;
 } 
 
 // Conditional receive  
-int MboxCondRecv(...) {
+int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
   // Implementation similar to MboxRecv but
   // returns -2 instead of blocking if empty
+    return 0;
+
 }
 
 // Wait for interrupt
@@ -180,6 +166,6 @@ void waitDevice(int type, int unit, int *status) {
 // Interrupt handlers 
 
 // System call handler
-void nullsys(...) {
+void nullsys() {
   // Print error and halt 
 }

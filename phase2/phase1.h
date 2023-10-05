@@ -5,7 +5,7 @@
 #ifndef _PHASE1_H
 #define _PHASE1_H
 
-#include "usloss.h"
+#include <usloss.h>
 
 /*
  * Maximum number of processes. 
@@ -87,12 +87,12 @@ extern void phase5_start_service_processes(void);
  */
 extern int testcase_main(void);
 
-/* this is called by the clock handler (which is in Phase 1), so that Phase 2
- * can add new clock features
- */
+// /* this is called by the clock handler (which is in Phase 1), so that Phase 2
+//  * can add new clock features
+//  */
 extern void phase2_clockHandler(void);
 
-/* this is called by sentinel to ask if there are any ongoing I/O operations */
+// /* this is called by sentinel to ask if there are any ongoing I/O operations */
 extern int phase2_check_io(void);
 
 
