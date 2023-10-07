@@ -15,7 +15,7 @@ int start2(char *arg)
   int mbox_id;
   int i;
     // printMbTable();
-  USLOSS_Console("start2(): started, trying to create too many mailboxes.  Exactly 10 should fail, since you should have auto-allocated 7 mailboxes for the various interrupts.\n");
+  USLOSS_Console("start2(): PID: %d, started, trying to create too many mailboxes.  Exactly 10 should fail, since you should have auto-allocated 7 mailboxes for the various interrupts.\n", getpid());
     // MboxCreate(10, 50);
   for (i = 0; i < MAXMBOX + 3; i++) {
     mbox_id = MboxCreate(10, 50);

@@ -26,48 +26,10 @@ int phase2_check_io();
 
 */
 struct Process {
-    int isInitialized;
-    char name[MAXNAME];
     int PID;
-    int priority;
-    bool isAlive;
-    USLOSS_Context context;
-
-    struct Process* nextSibling;
-    struct Process* prevSibling;
-    struct Process* parent;
-    struct Process* firstChild;
-
-    struct Process* queueHead;
-    struct Process* nextQueueNode;
-    struct Process* prevQueueNode;
-
-    struct Process* zapHead;
-    struct Process* nextZapNode;
-    struct Process* prevZapNode;
-    struct Process* iZap;
-
-    char* state;
-    void * stack;
-    int status;
-    bool isBlocked;
-    int isZapped;
-    bool isZombie;
-    int (*startFunc)(char*);
-    char* arg;
-    int time;
-    int startTime;
-    int endTime;
-    int totalTime;
-
     // phase2 fields
-
     struct Process* nextConsumerNode;
-    struct Process* prevConsumerNode;
     struct Process* nextProducerNode;
-    struct Process* prevProducerNode;
-
-
 };
 
 struct Message {
@@ -92,6 +54,8 @@ struct MB {
 // index to insert into mbTable. Increments after every mb insertion
 int mbIdCounter = 0;   
 int messageIDCounter =0;
+int pidCounter = 1;
+
 
 // arrays
 static struct Process shadowProcessTable[MAXPROC];
@@ -114,10 +78,17 @@ struct Message createMessage(int slotSize){
 
 }
 
-void fork(char *name, int(func)(char *), char *arg, int stacksize, int priority){
-  int pid = fork1(name, func, arg, stacksize, priority);
 
-
+void dumpProcesses1(void){
+    USLOSS_Console(" PID\n");
+    for (int i = 0; i < MAXPROC; i++){
+         if (shadowProcessTable[i].PID != 0){
+             continue;
+         }
+        else {
+          USLOSS_Console("%d\n",shadowProcessTable[i].PID);
+        }
+    } 
 }
 
 
@@ -131,6 +102,47 @@ void phase2_init() {
 
 void phase2_start_service_processes(){
   // phase2_init();
+}
+
+/** 
+     * Description: getter function that return process
+     *  
+     * Arg: pid of process to retrieve
+     * 
+     * return: Process that you are looking for
+    */
+struct Process* getProcess(int pid) {
+  if (pid != shadowProcessTable[pid%MAXPROC].PID){createShadowProcess(pid%MAXPROC); }  
+  return &shadowProcessTable[pid%MAXPROC];
+}
+
+struct MB* getMb(int mbId){
+  return &mbTable[mbId%MAXMBOX];
+}
+
+/*
+    Description: Creates a process and sets its fields to the
+    arguments passed in. Allocates the stack memory and adds
+    it to the processTable array.
+
+    Arg: char *name: name of the process
+    Arg: int (*startFunc)(char*): function to be run
+    Arg: void *arg: argument to pass into startFunc
+    Arg: int stackSize: size of stack to allocate
+    Arg: int priority: priority of the process
+
+    return int: the PID of the process
+*/
+int createShadowProcess(int pid, int slot) {
+    struct Process p = {
+      .PID = pid, 
+      .nextConsumerNode = NULL,
+      .nextProducerNode = NULL
+    };
+
+    shadowProcessTable[slot] = p;
+
+    return pid;
 }
 
 /*
@@ -167,6 +179,7 @@ int findOpenMessageSlot(){
     return -1;
 }
 
+
 void printMbTable(){
   for (int i=0;i<MAXMBOX; i++){
     if (mbTable[i].isInitialized == 1){
@@ -176,9 +189,6 @@ void printMbTable(){
   }
 }
 
-struct MB* getMb(int mbId){
-  return &mbTable[mbId%MAXMBOX];
-}
 
 // Create a new mailbox
 int MboxCreate(int numSlots, int slotSize) {
@@ -226,18 +236,27 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
   };
 
   int slot = findOpenMessageSlot();
+
   if (slot == -1){return -1;}
-
   messageSlots[slot] = m;
-  if (mb->consumerQueueHead != NULL){ // send it to the consumer
 
-  } else { // add to the buffer
-    if (mb->mailSlotsAvailable == 0){
-      struct Process* curProc = mb->consumerQueueHead;
-      while (curProc->nextConsumerNode != NULL){curProc = curProc -> nextConsumerNode;}
-      curProc = 
-    }
+  if (mb->consumerQueueHead != NULL){ // theres exists a process waiting to consume sent message
+
+  } 
+  else if (mb->mailSlotsAvailable != 0){ // if buffer is not full, add it to the buffer
+
   }
+  else if (mb->mailSlotsAvailable == 0){ // if buffer is full, add cur proc to the end of the producer queue and block cur proc
+
+  }
+  
+
+
+  
+
+
+
+
   return 0;
 }
 
