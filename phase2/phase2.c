@@ -191,6 +191,7 @@ int findOpenMbTableSlot(){
 }
 
 int findOpenMessageSlot(){
+    
     int i = 0;
     while (i<MAXSLOTS){
         int slot = messageIDCounter % MAXSLOTS;
@@ -289,7 +290,7 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 
   int slot = findOpenMessageSlot();
     if (slot == -1) {
-        return -1;
+        return -2;
     }
 
     struct Message* m = messageSlots[slot];
@@ -509,6 +510,8 @@ int MboxRecv(int mboxId, void *msgPtr, int msgMaxSize) {
 
 // Conditional send
 int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
+
+
   struct MB* mb = getMb(mbox_id);
   if (msg_size != 0 && msg_ptr == NULL){
     return -1;
@@ -523,7 +526,7 @@ int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
 
   int slot = findOpenMessageSlot();
     if (slot == -1) {
-        return -1;
+        return -2;
     }
 
     struct Message* m = messageSlots[slot];
@@ -646,9 +649,10 @@ void nullsys() {
 }
 
 void printMB(int mbid){
-  USLOSS_Console("\nPRINTING MAILBOX -----------: \n");
+    struct MB* mb = getMb(mbid);
 
-  struct MB* mb = getMb(mbid);
+  USLOSS_Console("\nPRINTING MAILBOX: %d -----------: \n",mb->id);
+
 
   USLOSS_Console("Consumer Queue: ");
   struct Process* curConsumer = mb -> consumerQueueHead;
