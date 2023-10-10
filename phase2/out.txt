@@ -1,1 +1,5 @@
-gcc -Wall -g -I../../../include -I.  -Wl,--start-group -L../../../lib -L. -lusloss4.7 -lphase1 -Wl,--end-group  testcases/test00.c phase2_common_testcase_code.o phase2.o libphase1.a   -o test00
+phase3_start_service_processes() called -- currently a NOP
+phase4_start_service_processes() called -- currently a NOP
+phase5_start_service_processes() called -- currently a NOP
+ERROR: Process pid 4 called quit() while it still had children.
+finish(): The simulation is now terminating.
