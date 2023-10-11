@@ -268,7 +268,8 @@ int createShadowProcess(int pid) {
     struct Process p = {
       .PID = pid, 
       .nextConsumerNode = NULL,
-      .nextProducerNode = NULL
+      .nextProducerNode = NULL,
+      .blocked = 0
     };
 
     shadowProcessTable[pid%MAXPROC] = p;
@@ -363,33 +364,50 @@ int slot = findOpenMbTableSlot();
 
 // Release a mailbox
 int MboxRelease(int mboxId) {
+     USLOSS_Console("release started\n");
+
   struct MB * mb = getMb(mboxId);
+
   mb->isInitialized = 0;
 
   mb->released = 1;
 
   while (mb->mailSlotQueueHead != NULL){
+
     mb->mailSlotQueueHead->isInitialized = 0;
     mb->mailSlotQueueHead = mb->mailSlotQueueHead -> nextMessage;
-  }
+        //printMB(7);
 
- 
-
-   while (mb->consumerQueueHead != NULL){
-    unblockProc(mb->consumerQueueHead->PID);
-    mb->consumerQueueHead = mb->consumerQueueHead -> nextConsumerNode;
   }
+  printMB(7);
+
+  mb->mailSlotQueueHead = NULL;
 
   
+  
+
+   while (mb->consumerQueueHead != NULL){
+    if (mb ->consumerQueueHead->blocked == 1){unblockProc(mb->consumerQueueHead->PID);}
+    mb->consumerQueueHead = mb->consumerQueueHead -> nextConsumerNode;
+  }
+  
+  
    while (mb->producerQueueHead != NULL){
-    unblockProc(mb->producerQueueHead->PID);
+    if (mb ->consumerQueueHead->blocked == 1){unblockProc(mb->producerQueueHead->PID);}
     mb->producerQueueHead = mb->producerQueueHead -> nextProducerNode;
   }
+   USLOSS_Console("release ended\n");
 
   return 0;
 }
 
-
+void setBlockField(int pid){
+  struct Process* curProc;
+  if (pid == NULL){curProc = getProcess(getpid());}
+  else {curProc = getProcess(pid);}
+  if (curProc->blocked == 0){curProc->blocked = 1;}
+  else {curProc->blocked = 0;}
+}
 // Send message to mailbox
 int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 
@@ -437,15 +455,16 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 
     struct Process* producer = getProcess(getpid());
     if (mb->consumerQueueHead == NULL){
-
+      setBlockField(NULL);
       blockMe(8000);
-            if (mb->isInitialized==0){return -3;}
+      if (mb->isInitialized==0){return -3;}
 
     }
 
 
     mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
     producer->message = NULL;
+    setBlockField(mb->consumerQueueHead->PID);
     unblockProc(mb->consumerQueueHead->PID);
     return 0;
   }
@@ -454,7 +473,7 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 
   if (mb->mailSlotsAvailable<=0){
     addToProducerQueue(mb);
-
+  setBlockField(NULL);
     blockMe(8000);
 
     if (mb->isInitialized==0){return -3;}
@@ -464,7 +483,7 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
   // printMB(7);
   // dumpProcesses();
   if (mb->consumerQueueHead != NULL){
-    
+    setBlockField(mb->consumerQueueHead->PID);
     unblockProc(mb->consumerQueueHead->PID);
   }
 
@@ -534,6 +553,7 @@ if (mb->released == 1){
 
   if (mb->mailSlotLimit == 0){ // CHECKING FOR ZERO SLOT MB
     if (mb->producerQueueHead == NULL){
+      setBlockField(NULL);
       blockMe(8000);
       if (mb->isInitialized==0){return -3;}
     }
@@ -544,6 +564,7 @@ if (mb->released == 1){
   }
 
   if (mb->mailSlotQueueHead == NULL){
+    setBlockField(NULL);
     blockMe(8000);
     if (mb->isInitialized==0){return -3;}
   }
@@ -565,6 +586,7 @@ if (mb->released == 1){
   if (mb->producerQueueHead!=NULL){
       struct Process* aboutToUB = mb->producerQueueHead;
       mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
+      setBlockField(aboutToUB->PID);
       unblockProc(aboutToUB->PID);
 
   }
@@ -630,6 +652,8 @@ if (mb->mailSlotsAvailable<=0){
 
     // ADD TO MAIL QUEUE
     if (mb->consumerQueueHead != NULL){
+            setBlockField(mb->consumerQueueHead->PID);
+
       unblockProc(mb->consumerQueueHead->PID);
     }
     addToMailQueue(mb,m);
@@ -682,6 +706,8 @@ if (mb->isInitialized == 0){
     if (mb->producerQueueHead!=NULL){
         struct Process* aboutToUB = mb->producerQueueHead;
         mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
+        setBlockField(aboutToUB->PID);
+
         unblockProc(aboutToUB->PID);
 
     }
