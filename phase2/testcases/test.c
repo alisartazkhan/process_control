@@ -40,11 +40,11 @@ int start2(char *arg)
         for (slotNum = 0; slotNum < 56; slotNum++)
         {
             if (boxNum == 44){
-
                //printMB(51);
                
             }
             result = MboxCondSend(mboxids[boxNum], NULL,0);
+            
             if (result == -2)
             {
                 USLOSS_Console("Mailbox has no more slots available, and so CondSend() returned -2: mailbox %d and slot %d\n", boxNum, slotNum);
