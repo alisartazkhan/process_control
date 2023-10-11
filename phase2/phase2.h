@@ -10,7 +10,7 @@
 // Maximum line length. Used by terminal read and write.
 #define MAXLINE         80
 
-#define MAXMBOX         2000
+#define MAXMBOX         100
 #define MAXSLOTS        2500
 #define MAX_MESSAGE     150  // largest possible message in a single slot
 

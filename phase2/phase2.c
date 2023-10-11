@@ -1,3 +1,5 @@
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <usloss.h>
@@ -13,7 +15,10 @@
 void phase2_clockHandler();
 int phase2_check_io();
 
+struct MB * getMb(int);
 
+void termHandler(int, void*);
+void syscallHandler(int, void*);
 
 
 /*
@@ -33,18 +38,20 @@ struct Process {
     // phase2 fields
     struct Process* nextConsumerNode;
     struct Process* nextProducerNode;
+    int blocked;
 };
 
 struct Message {
   int id;
   int isInitialized;
   int messageSizeLimit;
-  char* message;
+  void* message;
   struct Message* nextMessage;
   struct Message* prevMessage;
 };
 
 struct MB {
+  char* name;
   int isInitialized;
   int id;
   int mailSlotLimit;
@@ -53,16 +60,17 @@ struct MB {
   struct Message* mailSlotQueueHead;
   struct Process* consumerQueueHead;
   struct Process* producerQueueHead;
+  int released;
 };
 
 
 void addToConsumerQueue(struct MB *);
 void addToProducerQueue(struct MB *);
 void addToMailQueue(struct MB *, struct Message *);
+void nullsys(int);
 
 
 // index to insert into mbTable. Increments after every mb insertion
-int mbIdCounter = 0;   
 int messageIDCounter =0;
 int pidCounter = 1;
 
@@ -73,13 +81,45 @@ static struct MB mbTable[MAXMBOX];
 static struct Message* messageSlots[MAXSLOTS];
 void (*systemCallVec[MAXSYSCALLS])(USLOSS_Sysargs*);
 
+int countSlotsAvailable();
 
 
-void phase2_clockHandler(){
+int countSlotsAvailable(){
+  int count = 0;
+  for (int i=0; i < MAXSLOTS; i++){
+    if (messageSlots[i]->isInitialized != 0){
+      count++;
+    }
+  }
+  return count;
+}
+
+static int lastMessage = 0; 
+
+void phase2_clockHandler() {
+
+
+  int now = currentTime();
+
+  if (now - lastMessage >= 100000) {
+    //USLOSS_Console("now:    %d\n",now);
+    MboxSend(0, now, sizeof(int)); // send to clock mailbox
+
+    lastMessage = now; 
+  }
 
 }
 
+
+
 int phase2_check_io(){
+  for (int i = 0; i < 7; i++){
+    struct MB * mb = getMb(i);
+    if (mb->consumerQueueHead != NULL || getMb(i)->producerQueueHead != NULL){
+      return 1;
+    }
+  
+  }
   return 0;
 }
 
@@ -106,9 +146,19 @@ void dumpProcesses1(void){
 
 // Initialize mailboxes and other data structures
 void phase2_init() {
+  
   int mbNumber = 0;
   for (int i = 0; i< 7; i++){
-    MboxCreate(0,0);
+        if (i < 7){
+          MboxCreate(1,100);
+          //struct MB * mb = getMb(i);
+          
+
+        }
+        else{
+              MboxCreate(0,0);
+        }
+
   }
   for (int i = 0; i< MAXSLOTS; i++){
     struct Message* m = (struct Message*)malloc(sizeof(struct Message));
@@ -122,9 +172,66 @@ void phase2_init() {
     }
     messageSlots[i] = m;
   }
+  USLOSS_IntVec[USLOSS_CLOCK_INT] = phase2_clockHandler; 
+
+  //USLOSS_IntVec[USLOSS_DISK_INT] = diskHandler;
+  USLOSS_IntVec[USLOSS_TERM_INT] = termHandler;
+  USLOSS_IntVec[USLOSS_SYSCALL_INT] = syscallHandler;
+  for (int i = 0; i < MAXSYSCALLS; i++){
+      systemCallVec[i] = nullsys;
+  }
+
+
+  
+}
+void syscallHandler(int blank, void *unit){
+
+  
+  USLOSS_Sysargs* arg = (USLOSS_Sysargs*) unit;
+
+  if(arg->number < 0 || arg->number >= MAXSYSCALLS) {
+    USLOSS_Console("syscallHandler(): Invalid syscall number %d\n", arg->number);
+    USLOSS_Halt(1);
+  }
+
+  nullsys(arg->number);
+
+
+}
+void termHandler(int blank, void *unit){
+
+  long newUnit = (long) unit;
+  // USLOSS_Console("unit %d newUnit %d\n",unit,newUnit);
+
+
+  int status = 0;
+  //USLOSS_Console("retunr status: %d\n",USLOSS_DeviceInput(USLOSS_TERM_DEV,newUnit,&status));
+  //USLOSS_Console("ok %d",USLOSS_DEV_OK);
+
+  USLOSS_DeviceInput(USLOSS_TERM_DEV,newUnit,&status);
+
+
+  // int mboxId = newUnit+3;
+  // long *msgPtr = &status;
+  // int msgSize = sizeof(long);
+
+
+  //MboxSend(mboxId, msgPtr, msgSize); // send to clock mailbox
+
+
+
+  MboxSend(unit+3, status, sizeof(int)); // send to clock mailbox
+    // making sizeof(long) seems to help 
+    //1105579920
+    //1229995308
+    //1457782060
+
+
+
 }
 
 void phase2_start_service_processes(){
+
   // phase2_init();
 }
 
@@ -180,33 +287,38 @@ int createShadowProcess(int pid) {
 int findOpenMbTableSlot(){
     int i = 0;
     while (i<MAXMBOX){
-        int slot = mbIdCounter % MAXMBOX;
-        mbIdCounter++;
-        if (mbTable[slot].isInitialized == 0){
-            return slot;}
+        int slot = i;
         i++;
+        if (mbTable[slot].isInitialized == 0){
+            // USLOSS_Console("%d\n",slot);
+            return slot;}
     }
 
     return -1;
 }
+
+//see why dounle -- seg faults
+//check if mail slot is added before ti shoudl be
 
 int findOpenMessageSlot(){
     
     int i = 0;
     while (i<MAXSLOTS){
+
         int slot = messageIDCounter % MAXSLOTS;
         messageIDCounter++;
+
         if (messageSlots[slot]->isInitialized == 0){
+              messageIDCounter--;
             return slot;}
         i++;
     }
-
     return -1;
 }
 
 
 void printMbTable(){
-  USLOSS_Console("PRINTING MailBox table: ");
+  USLOSS_Console("PRINTING MailBox table: \n");
 
   for (int i=0;i<MAXMBOX; i++){
     if (mbTable[i].isInitialized == 1){
@@ -226,32 +338,35 @@ int MboxCreate(int numSlots, int slotSize) {
   if (numSlots < 0 || slotSize < 0 ){return -1;}
   if (numSlots > MAXSLOTS || slotSize < 0 ){return -1;}
 
-
+int slot = findOpenMbTableSlot();
+  if (slot == -1) {return -1;}
 
   struct MB m = {
     .isInitialized = 1,
-    .id = mbIdCounter,
+    .id = slot,
     .mailSlotLimit = numSlots,
     .messageSizeLimit = slotSize,
     .mailSlotsAvailable = numSlots,
     .mailSlotQueueHead = NULL,
     .producerQueueHead = NULL,
-    .consumerQueueHead = NULL
+    .consumerQueueHead = NULL,
+    .released = 0
   };
 
   // USLOSS_Console("%d\n", sizeof(mbTable)/ sizeof(mbTable[0]));
-  int slot = findOpenMbTableSlot();
-  if (slot == -1) {return -1;}
+  
 
   mbTable[slot] = m;
 
-  return mbIdCounter - 1;
+  return slot;
 }
 
 // Release a mailbox
 int MboxRelease(int mboxId) {
   struct MB * mb = getMb(mboxId);
   mb->isInitialized = 0;
+
+  mb->released = 1;
 
   while (mb->mailSlotQueueHead != NULL){
     mb->mailSlotQueueHead->isInitialized = 0;
@@ -277,93 +392,84 @@ int MboxRelease(int mboxId) {
 
 // Send message to mailbox
 int MboxSend(int mboxId, void *msgPtr, int msgSize) {
+
   struct MB* mb = getMb(mboxId);
+  if (mb->released == 1){
+    return -1;
+  }
+
+  if (mb->isInitialized==0){return -3;}
+
   if (msgSize != 0 && msgPtr == NULL){
     return -1;
   }
 
   if (msgSize > mb->messageSizeLimit){
-    // ERROR MESSAGE
-    //USLOSS_Console("ERROR: Message Size it too big for mb\n");
     return -1;
   }
 
   int slot = findOpenMessageSlot();
-    if (slot == -1) {
-        return -2;
-    }
+  if (slot == -1) {
+    return -2;
+  }
 
-    struct Message* m = messageSlots[slot];
+  struct Message* m = messageSlots[slot];
 
-    m->isInitialized = 1;
-    m->message = (char*)malloc(msgSize);  // Allocate memory and copy message
-    if (m->message == NULL) {
-        // Handle memory allocation failure
-        return -1;
-    }
+  m->isInitialized = 1;
+  m->message = malloc(msgSize);  // Allocate memory and copy message
+  if (m->message == NULL) {
+    // Handle memory allocation failure
+    return -1;
+  }
+
+  if (mb->id < 7){
+    memcpy(m->message, &msgPtr, msgSize);  // Copy message contents
+  }else{
     memcpy(m->message, msgPtr, msgSize);  // Copy message contents
-    m->messageSizeLimit = msgSize;
-    m->nextMessage = NULL;
-    m->prevMessage = NULL;
+  }
 
+  m->messageSizeLimit = msgSize;
+  m->nextMessage = NULL;
+  m->prevMessage = NULL;
 
- 
+  if (mb->mailSlotLimit == 0){ // CHECKING FOR ZERO SLOT MB
+    addToProducerQueue(mb);
 
-
-    if (mb->mailSlotLimit == 0){ // CHECKING FOR ZERO SLOT MB
-      addToProducerQueue(mb);
-
-      struct Process* producer = getProcess(getpid());
-      if (mb->consumerQueueHead == NULL){
-
-        blockMe(8000);
-      }
-      mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
-          //printMB(7);
-
-
-      producer->message = NULL;
-
-
-
-      unblockProc(mb->consumerQueueHead->PID);
-      return 0;
-    }
-
-
-
-    // ADD TO PRODUCER QUEUE
-    
-    if (mb->mailSlotsAvailable<=0){
-      addToProducerQueue(mb);
+    struct Process* producer = getProcess(getpid());
+    if (mb->consumerQueueHead == NULL){
 
       blockMe(8000);
+            if (mb->isInitialized==0){return -3;}
 
-      if (mb->isInitialized==0){
-
-
-        return -3;
-      }
     }
 
-    
 
-    // ADD TO MAIL QUEUE
-    addToMailQueue(mb,m);
-    if (mb->consumerQueueHead != NULL){
-      unblockProc(mb->consumerQueueHead->PID);
-    }
-
-    
-    //CHECK IF SPACE IN BUFFER
-
-
-
-    //how to unblock producer probably done in consumer
-    // how to unblock consumer problay done here
-     
+    mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
+    producer->message = NULL;
+    unblockProc(mb->consumerQueueHead->PID);
     return 0;
   }
+
+    // ADD TO PRODUCER QUEUE
+
+  if (mb->mailSlotsAvailable<=0){
+    addToProducerQueue(mb);
+
+    blockMe(8000);
+
+    if (mb->isInitialized==0){return -3;}
+  }
+  // ADD TO MAIL QUEUE
+  addToMailQueue(mb,m);
+  // printMB(7);
+  // dumpProcesses();
+  if (mb->consumerQueueHead != NULL){
+    
+    unblockProc(mb->consumerQueueHead->PID);
+  }
+
+  return 0;
+}
   
 
 
@@ -416,96 +522,54 @@ void addToMailQueue(struct MB * mb, struct Message * mes){
 
 // Receive message from mailbox  
 int MboxRecv(int mboxId, void *msgPtr, int msgMaxSize) {
-  // Once message is received, remove it from message queue and messageslot array
+  struct MB * mb = getMb(mboxId);
 
+if (mb->released == 1){
+    return -1;
+  }
+  if (mb->isInitialized==0){return -3;}
 
+  struct Process* curProc = getProcess(getpid());
+  addToConsumerQueue(mb);
 
-    struct MB * mb = getMb(mboxId);
-    struct Process* curProc = getProcess(getpid());
-    addToConsumerQueue(mb);
-
-
-
-    
-
-    if (mb->mailSlotLimit == 0){ // CHECKING FOR ZERO SLOT MB
-      if (mb->producerQueueHead == NULL){
-        blockMe(8000);
-
-      }
-
-
-            //printMB(7);
-
-      //mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
-
-      mb -> consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
-
-      
-       curProc->message = NULL;
-
-      // memcpy(curProc->message, mesRec, sizeof(struct Message));
-
-
-      // strcpy(msgPtr, curProc->message->message);
-      //USLOSS_Console("we get here\n");
-
-      return 0;
-    }
-    
-
-    // if(mb->mailSlotLimit == 0){
-
-    // }
-
-    if (mb->mailSlotQueueHead == NULL){
+  if (mb->mailSlotLimit == 0){ // CHECKING FOR ZERO SLOT MB
+    if (mb->producerQueueHead == NULL){
       blockMe(8000);
-
-
-      if (mb->isInitialized==0){
-
-        return -3;
-      }
+      if (mb->isInitialized==0){return -3;}
     }
 
-    struct Message* mesRec = mb->mailSlotQueueHead;
-    //USLOSS_Console("%d %d",mesRec->messageSizeLimit, msgMaxSize);
-    if(mesRec->messageSizeLimit > msgMaxSize){
-      //USLOSS_Console("too big");
-      return -1;
-    }
+    mb -> consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
+    curProc->message = NULL;
+    return 0;
+  }
 
-    
-    curProc->message = (struct Message*)malloc(sizeof(struct Message));
-    memcpy(curProc->message, mesRec, sizeof(struct Message));
-    strcpy(msgPtr, curProc->message->message);
-    mesRec->isInitialized = 0;
+  if (mb->mailSlotQueueHead == NULL){
+    blockMe(8000);
+    if (mb->isInitialized==0){return -3;}
+  }
 
-    mb->consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
-    mb->mailSlotQueueHead = mb->mailSlotQueueHead->nextMessage;
-    mb->mailSlotsAvailable++;
+  struct Message* mesRec = mb->mailSlotQueueHead;
+  if(mesRec->messageSizeLimit > msgMaxSize){
+    return -1;
+  }
 
-    if (mb->producerQueueHead!=NULL){
-        struct Process* aboutToUB = mb->producerQueueHead;
-        mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
-        unblockProc(aboutToUB->PID);
+  curProc->message = (struct Message*)malloc(sizeof(struct Message));
+  memcpy(curProc->message, mesRec, sizeof(struct Message));
+  memcpy(msgPtr, curProc->message->message,mesRec->messageSizeLimit);
+  mesRec->isInitialized = 0;
 
-    }
+  mb->consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
+  mb->mailSlotQueueHead = mb->mailSlotQueueHead->nextMessage;
+  mb->mailSlotsAvailable++;
 
+  if (mb->producerQueueHead!=NULL){
+      struct Process* aboutToUB = mb->producerQueueHead;
+      mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
+      unblockProc(aboutToUB->PID);
 
+  }
 
-
-
-  // add msg to message queue
-  /*
-  if msg queue is full, add process to producer queue. Make sure to update msg
-  field in that process to msg we are trying to send.
-  Once msgqueue has empty slots, remove producer queue head. Get the message associated
-  with that process in its message field. Add that message to the end of the message queue
-  */
   return mesRec -> messageSizeLimit;
-  //return 0;
-
 }
 
 // Conditional send
@@ -523,12 +587,26 @@ int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
     return -1;
   }
 
-
+  if (mb->isInitialized == 0){
+    return -1;
+  }
   int slot = findOpenMessageSlot();
     if (slot == -1) {
         return -2;
     }
 
+if (mb->mailSlotsAvailable<=0){
+      //USLOSS_Console("returned -2");
+      
+      return -2;
+
+      if (mb->isInitialized==0){
+
+
+        return -3;
+      }
+    }
+    
     struct Message* m = messageSlots[slot];
 
     m->isInitialized = 1;
@@ -548,22 +626,13 @@ int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
 
     // ADD TO PRODUCER QUEUE
     
-    if (mb->mailSlotsAvailable<=0){
-      //USLOSS_Console("returned -2");
-      return -2;
-
-      if (mb->isInitialized==0){
-
-
-        return -3;
-      }
-    }
+    
 
     // ADD TO MAIL QUEUE
-    addToMailQueue(mb,m);
     if (mb->consumerQueueHead != NULL){
       unblockProc(mb->consumerQueueHead->PID);
     }
+    addToMailQueue(mb,m);
 
     
     //CHECK IF SPACE IN BUFFER
@@ -584,7 +653,9 @@ int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
   
   struct MB * mb = getMb(mbox_id);
     struct Process* curProc = getProcess(getpid());
-
+if (mb->isInitialized == 0){
+    return -1;
+  }
 
 
     if (mb->mailSlotQueueHead == NULL){
@@ -598,10 +669,9 @@ int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
 
     struct Message* mesRec = mb->mailSlotQueueHead;
 
-    
     curProc->message = (struct Message*)malloc(sizeof(struct Message));
     memcpy(curProc->message, mesRec, sizeof(struct Message));
-    strcpy(msg_ptr, curProc->message->message);
+    memcpy(msg_ptr, curProc->message->message,mesRec->messageSizeLimit);
     mesRec->isInitialized = 0;
 
     mb->consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
@@ -631,21 +701,90 @@ int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
 
 }
 
+
+
 // Wait for interrupt
 void waitDevice(int type, int unit, int *status) {
+     int mboxId = -1;
 
+
+     if (type == USLOSS_CLOCK_DEV){ // 0
+        if (unit != 0){
+          USLOSS_Console("wront unit\n");
+          return;
+        }
+        mboxId = 0;
+
+      //unit =0, mailbox0
+
+     }
+     if (type == USLOSS_DISK_DEV){ // 2
+      if (unit != 1 && unit != 0){
+            USLOSS_Console("wront unit\n");
+            return;
+          }
+
+      mboxId = unit+1;
+      //unit = 0, mailbox1
+      //unit = 1, mailbox2
+
+     }
+     if (type == USLOSS_TERM_DEV){ // 3
+      if (unit < 0 || unit > 3){
+            USLOSS_Console("wront unit\n");
+            return;
+          }
+      mboxId = unit+3;
+      //unit = 0, mailbox3
+      //unit = 1, mailbox4
+      //unit = 2, mailbox5
+      //unit = 3, mailbox6
+
+     }
+
+
+     
+    int message;
+
+    MboxRecv(mboxId,&message,sizeof(int));
+
+
+
+
+
+    *status = message;
+    //USLOSS_Console("message %d\n",message);
+
+    // _validateArgs(type, unit, &mboxId);
+    // debug("passed type %d, unit %d", type, unit);
+
+    // assert(mboxId != -1);
+    // int pid = getpid();
+    // PQueue *thisproc = &shadowProcs[pid % MAXPROC];
+    // thisproc->pid = pid;
+    // thisproc->blockedInWaitDevice = 1;
+
+    // int message;
+    // int retVal = MboxRecv(mboxId, &message, sizeof(int));
+    ///debug("mbox recv args: id %d message: %d", mboxId, message);
+    //assert(retVal != -1);
+    //thisproc->blockedInWaitDevice = 1;
+
+    //*status = message;
+}
   // Check for invalid args
 
   // Block calling process
 
   // When interrupt occurs, copy status and unblock
-}
 
 // Interrupt handlers 
 
 // System call handler
-void nullsys() {
-  // Print error and halt 
+void nullsys(int num) {
+  
+  USLOSS_Console("nullsys(): Program called an unimplemented syscall. syscall no: %d   PSR: 0x%02x \n",num,USLOSS_PsrGet());
+  USLOSS_Halt(1);
 }
 
 void printMB(int mbid){
@@ -729,3 +868,24 @@ We don't wake up all blocked processes at once, to avoid race conditions.
 We prep the next consumer/message before context switching, to avoid races.
 
 This ensures each process receives the correct message in the proper order.*/
+
+
+// Enable interrupts
+void enableInterrupts() {
+
+  unsigned int psr = USLOSS_PsrGet();
+  psr |= USLOSS_PSR_CURRENT_INT;
+  USLOSS_PsrSet(psr);
+  USLOSS_Console("Interupts Enabled\n");
+
+}
+
+// Disable interrupts 
+void disableInterrupts() {
+
+  unsigned int psr = USLOSS_PsrGet();
+  psr &= ~USLOSS_PSR_CURRENT_INT;
+  USLOSS_PsrSet(psr);
+  USLOSS_Console("Interupts Disabled\n");
+
+}
