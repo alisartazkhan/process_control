@@ -50,8 +50,8 @@ struct Message {
 };
 
 /*
-Struct represents a mailbox that includes fields that keeps track of the producer, 
-consumer, and mailslot queue.
+  Struct represents a mailbox that includes fields that keeps track of the producer, 
+  consumer, and mailslot queue.
 */
 struct MB {
   char* name;
