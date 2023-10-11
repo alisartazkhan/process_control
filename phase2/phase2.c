@@ -1,4 +1,13 @@
-
+/**
+ * Author: Samuel Richardson and Ali Sartaz Khan
+ * Course: CSC 452
+ * Phase: 2
+ * Description: This program uses phase1 library and USLOSS to create a mailbox
+ * that is used to send and receive messages from one process to another. We also make 
+ * sure we have clock handlers that work with different use cases. Since we don't have 
+ * direct access to phase 1, we also used a shadow process table that emulates the proc 
+ * table in phase1. Using that table, we created processes that are used in the Mailboxes.
+ * */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,28 +18,15 @@
 #include <phase1.h>
 #include <phase2.h>
 
-// #define MAX_SLOTS 20
-// #define MAX_MESSAGE 150
-
-void phase2_clockHandler();
-int phase2_check_io();
-
-struct MB * getMb(int);
-
-void termHandler(int, void*);
-void syscallHandler(int, void*);
-
-
 /*
-    Struct that represents an individual process. Each field represents an
-    attribute for a individual process. When a process is created, it's
-    state is switched to Ready, and all of the fields passed in by fork
-    are initialized, as well as isInitialized being set to 1. When a process
-    is called using the dispatcher and its PID, its state is switched to 
-    Running, and its startFunc is called. When a process has run to it's 
-    entirety, its state is changed to Terminated, and after it has been
-    joined, it is removed from its parent tree and its stack is freed.
-
+  Struct that represents an individual process. Each field represents an
+  attribute for a individual process. When a process is created, it's
+  state is switched to Ready, and all of the fields passed in by fork
+  are initialized, as well as isInitialized being set to 1. When a process
+  is called using the dispatcher and its PID, its state is switched to 
+  Running, and its startFunc is called. When a process has run to it's 
+  entirety, its state is changed to Terminated, and after it has been
+  joined, it is removed from its parent tree and its stack is freed.
 */
 struct Process {
     int PID;
@@ -41,6 +37,9 @@ struct Process {
     int blocked;
 };
 
+/*
+  Struct represents a single message that is stored in processes and the mailboxes.
+*/
 struct Message {
   int id;
   int isInitialized;
@@ -50,6 +49,10 @@ struct Message {
   struct Message* prevMessage;
 };
 
+/*
+Struct represents a mailbox that includes fields that keeps track of the producer, 
+consumer, and mailslot queue.
+*/
 struct MB {
   char* name;
   int isInitialized;
@@ -63,16 +66,20 @@ struct MB {
   int released;
 };
 
-
+void phase2_clockHandler();
+int phase2_check_io();
+struct MB * getMb(int);
+void termHandler(int, void*);
+void syscallHandler(int, void*);
 void addToConsumerQueue(struct MB *);
 void addToProducerQueue(struct MB *);
 void addToMailQueue(struct MB *, struct Message *);
 void nullsys(int);
 
-
 // index to insert into mbTable. Increments after every mb insertion
 int messageIDCounter =0;
 int pidCounter = 1;
+static int lastMessage = 0; 
 
 
 // arrays
@@ -81,85 +88,53 @@ static struct MB mbTable[MAXMBOX];
 static struct Message* messageSlots[MAXSLOTS];
 void (*systemCallVec[MAXSYSCALLS])(USLOSS_Sysargs*);
 
-int countSlotsAvailable();
 
-
-int countSlotsAvailable(){
-  int count = 0;
-  for (int i=0; i < MAXSLOTS; i++){
-    if (messageSlots[i]->isInitialized != 0){
-      count++;
-    }
-  }
-  return count;
-}
-
-static int lastMessage = 0; 
-
+/*
+  This method is called by the code in phase1 before timeslicing that sends a message
+  to the clockhandler mailbox. The time it takes for it to send is 100ms.
+*/
 void phase2_clockHandler() {
-
-
   int now = currentTime();
 
   if (now - lastMessage >= 100000) {
     //USLOSS_Console("now:    %d\n",now);
     MboxSend(0, now, sizeof(int)); // send to clock mailbox
-
     lastMessage = now; 
   }
 
 }
 
 
-
+/*
+  This method checks to see if there are any blocked processes available in the mailboxes.
+*/
 int phase2_check_io(){
   for (int i = 0; i < 7; i++){
     struct MB * mb = getMb(i);
     if (mb->consumerQueueHead != NULL || getMb(i)->producerQueueHead != NULL){
       return 1;
     }
-  
   }
   return 0;
 }
 
-struct Message createMessage(int slotSize){
 
-
-}
-
-
-void dumpProcesses1(void){
-    USLOSS_Console(" PID\n");
-    for (int i = 0; i < MAXPROC; i++){
-         if (shadowProcessTable[i].PID == 0){
-             continue;
-         }
-        else {
-          USLOSS_Console("%d\n",shadowProcessTable[i].PID);
-        }
-    } 
-    USLOSS_Console("vsssssssssss\n");
-    dumpProcesses();
-}
-
-
-// Initialize mailboxes and other data structures
+/*
+  This method initializes mailboxes, messages, initializes interrupt handlers, and 
+  populates syscall vector.
+*/
 void phase2_init() {
-  
   int mbNumber = 0;
+  // initializes mailboxes for interrupts
   for (int i = 0; i< 7; i++){
         if (i < 7){
           MboxCreate(1,100);
-          //struct MB * mb = getMb(i);
-          
-
         }
         else{
               MboxCreate(0,0);
         }
-
   }
+  // initializes messages
   for (int i = 0; i< MAXSLOTS; i++){
     struct Message* m = (struct Message*)malloc(sizeof(struct Message));
     if (m != NULL) {
@@ -172,84 +147,89 @@ void phase2_init() {
     }
     messageSlots[i] = m;
   }
-  USLOSS_IntVec[USLOSS_CLOCK_INT] = phase2_clockHandler; 
 
-  //USLOSS_IntVec[USLOSS_DISK_INT] = diskHandler;
+  USLOSS_IntVec[USLOSS_CLOCK_INT] = phase2_clockHandler; 
+  // USLOSS_IntVec[USLOSS_DISK_INT] = diskHandler;
   USLOSS_IntVec[USLOSS_TERM_INT] = termHandler;
   USLOSS_IntVec[USLOSS_SYSCALL_INT] = syscallHandler;
+
+  // populate syscall array
   for (int i = 0; i < MAXSYSCALLS; i++){
       systemCallVec[i] = nullsys;
   }
-
-
-  
 }
-void syscallHandler(int blank, void *unit){
 
-  
+/*
+  This is a syscall handler that takes in two arguments and once this is called, it outputs
+  an error message and stops the program.
+
+  Args:
+    blank: int argument that isn't used
+    unit: void* argument that is cast to a USLOSS_Sysargs*
+
+  Return: void
+*/
+void syscallHandler(int blank, void *unit){
   USLOSS_Sysargs* arg = (USLOSS_Sysargs*) unit;
 
   if(arg->number < 0 || arg->number >= MAXSYSCALLS) {
     USLOSS_Console("syscallHandler(): Invalid syscall number %d\n", arg->number);
     USLOSS_Halt(1);
   }
-
   nullsys(arg->number);
-
-
 }
+
+
+/*
+  This is a term handler that takes in two arguments and once this is called, it waits 
+  for device input using USLOSS and then sends a message to the mailbox of that associated
+  unit.
+
+  Args:
+    blank: int argument that isn't used
+    unit: void* argument that is cast to a USLOSS_Sysargs*
+
+  Return: void
+*/
 void termHandler(int blank, void *unit){
-
   long newUnit = (long) unit;
-  // USLOSS_Console("unit %d newUnit %d\n",unit,newUnit);
-
-
   int status = 0;
-  //USLOSS_Console("retunr status: %d\n",USLOSS_DeviceInput(USLOSS_TERM_DEV,newUnit,&status));
-  //USLOSS_Console("ok %d",USLOSS_DEV_OK);
-
   USLOSS_DeviceInput(USLOSS_TERM_DEV,newUnit,&status);
-
-
-  // int mboxId = newUnit+3;
-  // long *msgPtr = &status;
-  // int msgSize = sizeof(long);
-
-
-  //MboxSend(mboxId, msgPtr, msgSize); // send to clock mailbox
-
-
-
   MboxSend(unit+3, status, sizeof(int)); // send to clock mailbox
-    // making sizeof(long) seems to help 
-    //1105579920
-    //1229995308
-    //1457782060
-
-
-
 }
 
-void phase2_start_service_processes(){
 
-  // phase2_init();
-}
+/*
+  This method starts the process in phase2. This is blank because it isn't necessary for our implementation.
+*/
+void phase2_start_service_processes(){}
 
-/** 
-     * Description: getter function that return process
-     *  
-     * Arg: pid of process to retrieve
-     * 
-     * return: Process that you are looking for
-    */
+
+/* 
+  Description: getter function that return process
+   
+  Arg: pid of process to retrieve
+   
+  return: Process that you are looking for
+*/
 struct Process* getProcess(int pid) {
   if (pid != shadowProcessTable[pid%MAXPROC].PID){createShadowProcess(pid); }  
   return &shadowProcessTable[pid%MAXPROC];
 }
 
+
+/*
+  Getter function to get a mailbox from the mb table 
+  
+  Args:
+    mbId: id of the mailbox
+
+  Return: returns a pointer to the MB struct
+*/
 struct MB* getMb(int mbId){
   return &mbTable[mbId%MAXMBOX];
 }
+
 
 /*
     Description: Creates a process and sets its fields to the
@@ -272,7 +252,6 @@ int createShadowProcess(int pid) {
     };
 
     shadowProcessTable[pid%MAXPROC] = p;
-
     return pid;
 }
 
@@ -297,17 +276,21 @@ int findOpenMbTableSlot(){
     return -1;
 }
 
-//see why dounle -- seg faults
-//check if mail slot is added before ti shoudl be
 
+/*
+  Description: iterates through the messageSlots to find an open slot
+  for the created process using messageIDCounter % MAXSLOTS.
+
+  Arg: none
+
+  return int: the found slot for the process or -1 if table is full
+*/
 int findOpenMessageSlot(){
     
     int i = 0;
     while (i<MAXSLOTS){
-
         int slot = messageIDCounter % MAXSLOTS;
         messageIDCounter++;
-
         if (messageSlots[slot]->isInitialized == 0){
               messageIDCounter--;
             return slot;}
@@ -317,28 +300,23 @@ int findOpenMessageSlot(){
 }
 
 
-void printMbTable(){
-  USLOSS_Console("PRINTING MailBox table: \n");
 
-  for (int i=0;i<MAXMBOX; i++){
-    if (mbTable[i].isInitialized == 1){
-      USLOSS_Console("ID: %d | MESSAGESIZELIMIT: %d | MAILSLOTLIMIT: %d | MAILSLOTSAVAILABLE: %d\n", 
-      mbTable[i].id, mbTable[i].messageSizeLimit, mbTable[i].mailSlotLimit, mbTable[i].mailSlotsAvailable);
-    }
-  }
-}
+/*
+  Method creates a new mailbox and inserts a pointer to that MB inside the 
+  mailbox table.
 
-void printMessage(struct Process* p){
-  USLOSS_Console("PRINTING MESSAGE FROM PROCESS: ");
-  USLOSS_Console("PID: %d | MESSAGE: %s\n", p->PID, (char*)p->message);
-}
-
-// Create a new mailbox
+  Args:
+    numslots: int value that represents the total number of slots in a MB
+    slotSize: int the total size of each mail slot
+  
+  Returns: the Mailbox ID. -1 if args are invalid or there are no more available slots for
+            mailbox.
+*/
 int MboxCreate(int numSlots, int slotSize) {
   if (numSlots < 0 || slotSize < 0 ){return -1;}
   if (numSlots > MAXSLOTS || slotSize < 0 ){return -1;}
 
-int slot = findOpenMbTableSlot();
+  int slot = findOpenMbTableSlot();
   if (slot == -1) {return -1;}
 
   struct MB m = {
@@ -353,15 +331,20 @@ int slot = findOpenMbTableSlot();
     .released = 0
   };
 
-  // USLOSS_Console("%d\n", sizeof(mbTable)/ sizeof(mbTable[0]));
-  
-
   mbTable[slot] = m;
 
   return slot;
 }
 
-// Release a mailbox
+/*
+  Iterates through the different queues in the Mailbox and unblocks each process in the
+  queue and also frees every message in the mailslot queue.
+
+  Args:
+    mboxId: int id of the mailbox
+
+  Returns: returns 0 once MB is released.
+*/
 int MboxRelease(int mboxId) {
   struct MB * mb = getMb(mboxId);
   mb->isInitialized = 0;
@@ -390,7 +373,16 @@ int MboxRelease(int mboxId) {
 }
 
 
-// Send message to mailbox
+/*
+  Method is called by a producer process that attempts to send a message to the mailbox.
+
+  Args:
+    mboxId: int value of the ID of the mailbox
+    msgPtr: void* containing the message that is being sent
+    msgSize: int value of the size of the message
+  
+  Returns: status of the send process or size of the message
+*/
 int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 
   struct MB* mb = getMb(mboxId);
@@ -472,7 +464,14 @@ int MboxSend(int mboxId, void *msgPtr, int msgSize) {
 }
   
 
+/*
+  Method adds process to the end of the producer queue.
 
+  Args:
+    mb: struct MB pointer that is being added
+
+  Returns: void
+*/
 void addToProducerQueue(struct MB * mb){
   if (mb->producerQueueHead == NULL){
       mb->producerQueueHead = getProcess(getpid());
@@ -486,6 +485,15 @@ void addToProducerQueue(struct MB * mb){
     }
 }
 
+
+/*
+  Method adds process to the end of the consumer queue.
+
+  Args:
+    mb: struct MB pointer that is being added
+
+  Returns: void
+*/
 void addToConsumerQueue(struct MB * mb){
 
   if (mb->consumerQueueHead == NULL){
@@ -500,6 +508,16 @@ void addToConsumerQueue(struct MB * mb){
     }
 }
 
+
+/*
+  Method adds process to the end of the mail queue.
+
+  Args:
+    mb: struct MB pointer that is being added
+    mes: struct Message* pointer of the message that is being added
+
+  Returns: void
+*/
 void addToMailQueue(struct MB * mb, struct Message * mes){
   mb->mailSlotsAvailable--;
   if (mb->mailSlotQueueHead == NULL){
@@ -520,7 +538,16 @@ void addToMailQueue(struct MB * mb, struct Message * mes){
 }
 
 
-// Receive message from mailbox  
+/*
+  Method is called by a consumer process that attempts to receive a message from the mailbox.
+
+  Args:
+    mboxId: int value of the ID of the mailbox
+    msgPtr: void* containing the message will be received
+    msgSize: int value of the size of the message
+  
+  Returns: status of the receive process or size of the message
+*/
 int MboxRecv(int mboxId, void *msgPtr, int msgMaxSize) {
   struct MB * mb = getMb(mboxId);
 
@@ -572,10 +599,20 @@ if (mb->released == 1){
   return mesRec -> messageSizeLimit;
 }
 
-// Conditional send
+
+/*
+  Method is called by a producer process that attempts to receive a message from the mailbox.
+  If there is a scenario where you cant send the message immediately, it doesn't block the
+  process.
+
+  Args:
+    mboxId: int value of the ID of the mailbox
+    msg_ptr: void* containing the message will be received
+    msg_size: int value of the size of the message
+  
+  Returns: status of the send process or size of the message
+*/
 int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
-
-
   struct MB* mb = getMb(mbox_id);
   if (msg_size != 0 && msg_ptr == NULL){
     return -1;
@@ -595,139 +632,103 @@ int MboxCondSend(int mbox_id, void *msg_ptr, int msg_size) {
         return -2;
     }
 
-if (mb->mailSlotsAvailable<=0){
-      //USLOSS_Console("returned -2");
-      
-      return -2;
-
-      if (mb->isInitialized==0){
-
-
-        return -3;
-      }
+  if (mb->mailSlotsAvailable<=0){
+    return -2;
+    if (mb->isInitialized==0){return -3;}
     }
     
-    struct Message* m = messageSlots[slot];
+  struct Message* m = messageSlots[slot];
 
-    m->isInitialized = 1;
-    m->message = (char*)malloc(msg_size);  // Allocate memory and copy message
-    if (m->message == NULL) {
-        // Handle memory allocation failure
-        return -1;
-    }
-    memcpy(m->message, msg_ptr, msg_size);  // Copy message contents
-    m->messageSizeLimit = msg_size;
-    m->nextMessage = NULL;
-    m->prevMessage = NULL;
+  m->isInitialized = 1;
+  m->message = (char*)malloc(msg_size);  // Allocate memory and copy message
+  if (m->message == NULL) {return -1;}
+  memcpy(m->message, msg_ptr, msg_size);  // Copy message contents
+  m->messageSizeLimit = msg_size;
+  m->nextMessage = NULL;
+  m->prevMessage = NULL;
 
-
-
-
-
-    // ADD TO PRODUCER QUEUE
-    
-    
-
-    // ADD TO MAIL QUEUE
-    if (mb->consumerQueueHead != NULL){
-      unblockProc(mb->consumerQueueHead->PID);
-    }
-    addToMailQueue(mb,m);
-
-    
-    //CHECK IF SPACE IN BUFFER
-
-
-
-    //how to unblock producer probably done in consumer
-    // how to unblock consumer problay done here
-
-    return 0;
-
+  // ADD TO MAIL QUEUE
+  if (mb->consumerQueueHead != NULL){
+    unblockProc(mb->consumerQueueHead->PID);
+  }
+  addToMailQueue(mb,m);
   return 0;
 } 
 
-// Conditional receive  
-int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
-  //printMB(7);
+
+/*
+  Method is called by a consumer process that attempts to receive a message from the mailbox.
+  If there is a scenario where you cant receive the message immediately, it doesn't block the
+  process.
+
+  Args:
+    mboxId: int value of the ID of the mailbox
+    msg_ptr: void* containing the message will be received
+    msg_size: int value of the size of the message
   
+  Returns: status of the send process or size of the message
+*/ 
+int MboxCondRecv(int mbox_id, void *msg_ptr, int msg_max_size) {
   struct MB * mb = getMb(mbox_id);
-    struct Process* curProc = getProcess(getpid());
-if (mb->isInitialized == 0){
-    return -1;
+  struct Process* curProc = getProcess(getpid());
+  if (mb->isInitialized == 0){return -1;}
+
+  if (mb->mailSlotQueueHead == NULL){
+    return -2;
+    if (mb->isInitialized==0){return -3;}
+  }
+  addToConsumerQueue(mb);
+
+  struct Message* mesRec = mb->mailSlotQueueHead;
+
+  curProc->message = (struct Message*)malloc(sizeof(struct Message));
+  memcpy(curProc->message, mesRec, sizeof(struct Message));
+  memcpy(msg_ptr, curProc->message->message,mesRec->messageSizeLimit);
+  mesRec->isInitialized = 0;
+
+  mb->consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
+  mb->mailSlotQueueHead = mb->mailSlotQueueHead->nextMessage;
+  mb->mailSlotsAvailable++;
+
+
+  if (mb->producerQueueHead!=NULL){
+    struct Process* aboutToUB = mb->producerQueueHead;
+    mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
+    unblockProc(aboutToUB->PID);
   }
 
-
-    if (mb->mailSlotQueueHead == NULL){
-      return -2;
-      if (mb->isInitialized==0){
-
-        return -3;
-      }
-    }
-    addToConsumerQueue(mb);
-
-    struct Message* mesRec = mb->mailSlotQueueHead;
-
-    curProc->message = (struct Message*)malloc(sizeof(struct Message));
-    memcpy(curProc->message, mesRec, sizeof(struct Message));
-    memcpy(msg_ptr, curProc->message->message,mesRec->messageSizeLimit);
-    mesRec->isInitialized = 0;
-
-    mb->consumerQueueHead = mb->consumerQueueHead->nextConsumerNode;
-    mb->mailSlotQueueHead = mb->mailSlotQueueHead->nextMessage;
-    mb->mailSlotsAvailable++;
-
-
-    if (mb->producerQueueHead!=NULL){
-        struct Process* aboutToUB = mb->producerQueueHead;
-        mb->producerQueueHead = mb->producerQueueHead->nextProducerNode;
-        unblockProc(aboutToUB->PID);
-
-    }
-
-
-
-
-
-  // add msg to message queue
-  /*
-  if msg queue is full, add process to producer queue. Make sure to update msg
-  field in that process to msg we are trying to send.
-  Once msgqueue has empty slots, remove producer queue head. Get the message associated
-  with that process in its message field. Add that message to the end of the message queue
-  */
   return mesRec -> messageSizeLimit;
-
 }
 
 
 
-// Wait for interrupt
+/*
+  Method called MBoxRecv() on the right mailbox depending on the
+  unit and device type. The message that it received from the function
+  call it then assigns it to the status pointer in the argument.
+
+  Args:
+    type: int value of the device type
+    unit: unit of the device
+    status: int* of the status value 
+  
+  Returns: void
+*/
 void waitDevice(int type, int unit, int *status) {
      int mboxId = -1;
-
-
      if (type == USLOSS_CLOCK_DEV){ // 0
         if (unit != 0){
           USLOSS_Console("wront unit\n");
           return;
         }
         mboxId = 0;
-
-      //unit =0, mailbox0
-
      }
      if (type == USLOSS_DISK_DEV){ // 2
       if (unit != 1 && unit != 0){
             USLOSS_Console("wront unit\n");
             return;
           }
-
       mboxId = unit+1;
-      //unit = 0, mailbox1
-      //unit = 1, mailbox2
-
      }
      if (type == USLOSS_TERM_DEV){ // 3
       if (unit < 0 || unit > 3){
@@ -735,157 +736,52 @@ void waitDevice(int type, int unit, int *status) {
             return;
           }
       mboxId = unit+3;
-      //unit = 0, mailbox3
-      //unit = 1, mailbox4
-      //unit = 2, mailbox5
-      //unit = 3, mailbox6
-
      }
-
-
-     
+ 
     int message;
-
     MboxRecv(mboxId,&message,sizeof(int));
 
-
-
-
-
     *status = message;
-    //USLOSS_Console("message %d\n",message);
-
-    // _validateArgs(type, unit, &mboxId);
-    // debug("passed type %d, unit %d", type, unit);
-
-    // assert(mboxId != -1);
-    // int pid = getpid();
-    // PQueue *thisproc = &shadowProcs[pid % MAXPROC];
-    // thisproc->pid = pid;
-    // thisproc->blockedInWaitDevice = 1;
-
-    // int message;
-    // int retVal = MboxRecv(mboxId, &message, sizeof(int));
-    ///debug("mbox recv args: id %d message: %d", mboxId, message);
-    //assert(retVal != -1);
-    //thisproc->blockedInWaitDevice = 1;
-
-    //*status = message;
 }
-  // Check for invalid args
 
-  // Block calling process
 
-  // When interrupt occurs, copy status and unblock
+/*
+  Method that outputs an error message and halts the program.
 
-// Interrupt handlers 
-
-// System call handler
+  Args:
+    num: int value representing the syscall number
+  
+  Returns: void
+*/
 void nullsys(int num) {
   
   USLOSS_Console("nullsys(): Program called an unimplemented syscall. syscall no: %d   PSR: 0x%02x \n",num,USLOSS_PsrGet());
   USLOSS_Halt(1);
 }
 
-void printMB(int mbid){
-    struct MB* mb = getMb(mbid);
 
-  USLOSS_Console("\nPRINTING MAILBOX: %d -----------: \n",mb->id);
-
-
-  USLOSS_Console("Consumer Queue: ");
-  struct Process* curConsumer = mb -> consumerQueueHead;
-  while (curConsumer != NULL){
-    USLOSS_Console("PID: %d -> ", curConsumer->PID);
-    curConsumer = curConsumer -> nextConsumerNode;
-  }
-  USLOSS_Console("NULL\n");
-
-  USLOSS_Console("Producer Queue: ");
-  struct Process* curProducer = mb -> producerQueueHead;
-  while (curProducer != NULL){
-    USLOSS_Console("PID: %d -> ", curProducer->PID);
-    curProducer = curProducer -> nextProducerNode;
-  }
-  USLOSS_Console("NULL\n");
-
-
-  USLOSS_Console("Mail Slot Queue (%d/%d): ", mb->mailSlotsAvailable,mb->mailSlotLimit);
-  struct Message* curMsg = mb -> mailSlotQueueHead;
-  while (curMsg != NULL){
-    USLOSS_Console("MESSAGE: %s -> ", (char*)curMsg->message);
-    curMsg = curMsg -> nextMessage;
-  }
-  USLOSS_Console("NULL\n");
-
-  USLOSS_Console("END OF PRINTING MAILBOX -----------: \n\n");
-
-}
-
-
-
-
-// method #1 we may switch to
-
-//send
-// always add to the end of producer queue
-// if there is a mailbox slot/buffer space, add it to the space
-// if not, block, 
-// when unblocked, add to mailbox slot
-
-//receive
-// always add to end of rec queue
-// if no mail, block, 
-// when unblocked, check if mail slots are empty
-// if mail slot not empy, recieve mail from from of mailslotqueue
-// if mail slot empty, recieve mail from producer queue
-
-
-
-
-
-
-
-
-
-
-/*The mailbox keeps track of two queues:
-
-Consumer queue - contains PIDs of processes blocked in MboxRecv() waiting to receive messages
-Mail slot queue - contains messages that have been sent but not yet delivered
-When a message arrives:
-
-Dequeue the first consumer from the consumer queue. This is the process that blocked first.
-Remove the first message from the mail slot queue.
-Deliver the message to the consumer by copying it into their buffer.
-Mark the consumer as ready to run.
-Before letting the consumer run, check if there are more messages and consumers. If so, queue up the next consumer to receive the next message.
-Context switch to the consumer process to let it run.
-The key thing is we extract consumers and messages in pairs, one at a time, matching the order they arrived.
-
-We don't wake up all blocked processes at once, to avoid race conditions.
-
-We prep the next consumer/message before context switching, to avoid races.
-
-This ensures each process receives the correct message in the proper order.*/
-
-
-// Enable interrupts
+/*
+  Method enables interrupts using the psr.
+  
+  Args: NONE
+  Returns: void
+*/
 void enableInterrupts() {
 
   unsigned int psr = USLOSS_PsrGet();
   psr |= USLOSS_PSR_CURRENT_INT;
   USLOSS_PsrSet(psr);
-  USLOSS_Console("Interupts Enabled\n");
 
 }
 
-// Disable interrupts 
+/*
+  Method disables interrupts using the psr.
+  
+  Args: NONE
+  Returns: void
+*/
 void disableInterrupts() {
-
   unsigned int psr = USLOSS_PsrGet();
   psr &= ~USLOSS_PSR_CURRENT_INT;
   USLOSS_PsrSet(psr);
-  USLOSS_Console("Interupts Disabled\n");
-
 }
