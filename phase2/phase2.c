@@ -533,7 +533,7 @@ void addToMailQueue(struct MB * mb, struct Message * mes){
         curMessage -> nextMessage = mes;
 
     }
-    mes->nextMessage=NULL;
+  mes->nextMessage=NULL;
 
 }
 
@@ -551,7 +551,7 @@ void addToMailQueue(struct MB * mb, struct Message * mes){
 int MboxRecv(int mboxId, void *msgPtr, int msgMaxSize) {
   struct MB * mb = getMb(mboxId);
 
-if (mb->released == 1){
+  if (mb->released == 1){
     return -1;
   }
   if (mb->isInitialized==0){return -3;}
