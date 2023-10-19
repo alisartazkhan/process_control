@@ -64,7 +64,9 @@ int Wait(int *pid, int *status)
 
 void Terminate(int status)
 {
+    USLOSS_Console("hehe");
     require_user_mode(__func__);
+    USLOSS_Console("hehe");
 
     USLOSS_Sysargs args;
     memset(&args, 0, sizeof(args));
