@@ -1,5 +1,5 @@
 /*
- * Simple Spawn test. Child of lower priority than parent.
+ * Simple Spawn test.
  */
 
 #include <usloss.h>
@@ -16,17 +16,12 @@ int Child1(char *);
 int start3(char *arg)
 {
     int pid;
-    int status;
 
     USLOSS_Console("start3(): started.  Calling Spawn for Child1\n");
 
-    Spawn("Child1", Child1, NULL, USLOSS_MIN_STACK, 5, &pid);
+    Spawn("Child1", Child1, NULL, USLOSS_MIN_STACK, 2, &pid);
 
-    USLOSS_Console("start3(): fork %d\n", pid);
-
-    Wait(&pid, &status);
-
-    USLOSS_Console("start3(): result of wait, pid = %d, status = %d\n", pid, status);
+    USLOSS_Console("start3(): after spawn of %d\n", pid);
     USLOSS_Console("start3(): Parent done. Calling Terminate.\n");
 
     Terminate(0);
@@ -38,6 +33,8 @@ int Child1(char *arg)
 {
     USLOSS_Console("Child1(): starting\n");
     USLOSS_Console("Child1(): done\n");
-    Terminate(9);
+
+    // Terminate(9);
+    return 9;
 }
 

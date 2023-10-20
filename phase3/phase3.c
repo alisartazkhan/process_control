@@ -9,25 +9,127 @@
 #include <phase3.h>
 #include <usyscall.h>
 typedef void (*FunctionPointer)();
-void start3_trampoline(void* func, char* arg) {
 
-  // Print PSR to show we're in kernel mode  
-  USLOSS_Console("start3_trampoline: PSR before = 0x%x\n", USLOSS_PsrGet());
+int pidCounter = 5;
+/*
+  Struct that represents an individual process. Each field represents an
+  attribute for a individual process. When a process is created, it's
+  state is switched to Ready, and all of the fields passed in by fork
+  are initialized, as well as isInitialized being set to 1. When a process
+  is called using the dispatcher and its PID, its state is switched to 
+  Running, and its startFunc is called. When a process has run to it's 
+  entirety, its state is changed to Terminated, and after it has been
+  joined, it is removed from its parent tree and its stack is freed.
+*/
+struct Process {
+    int PID;
+    int (*startFunc)(char*);
+    char* arg;
+};
 
-  // Set PSR to user mode
-  int mode = USLOSS_PsrGet() | USLOSS_PSR_CURRENT_MODE;
-  USLOSS_PsrSet(mode);
+// arrays
+static struct Process shadowProcessTable[MAXPROC];
 
-  // Print PSR to confirm now in user mode
-  USLOSS_Console("start3_trampoline: PSR after = 0x%x\n", USLOSS_PsrGet());
+/*
+    Description: Creates a process and sets its fields to the
+    arguments passed in. Allocates the stack memory and adds
+    it to the processTable array.
 
-  // Call user process main function
-  //start3(NULL);
-    FunctionPointer function = (FunctionPointer)func; // Cast void* to the function pointer type
-    function(arg);
+    Arg: char *name: name of the process
+    Arg: int (*startFunc)(char*): function to be run
+    Arg: void *arg: argument to pass into startFunc
+    Arg: int stackSize: size of stack to allocate
+    Arg: int priority: priority of the process
 
-  // We should never get here!
-  USLOSS_Halt(1);
+    return int: the PID of the process
+*/
+int createShadowProcess(int (*func)(char*), void *arg) {
+    struct Process p = {
+      .PID = pidCounter, 
+      .startFunc = func,
+      .arg = arg
+    };
+
+
+    shadowProcessTable[pidCounter%MAXPROC] = p;
+    pidCounter ++;
+    return pidCounter--;
+}
+
+/*
+    Description: prints information about the processTable in the same formatting
+    given by the test cases.
+
+    Arg: none
+
+    return: none
+*/
+void dumpSP(void){
+    USLOSS_Console("\n DUMPING PROC\n");
+    for (int i = 0; i < MAXPROC; i++){
+         if ( shadowProcessTable[i].PID == 0){
+             continue;
+         }
+        USLOSS_Console("PID: %d \n",shadowProcessTable[i].PID);
+
+    }
+    USLOSS_Console(" END OF DUMP PROC\n\n");
+
+}
+
+/* 
+  Description: getter function that return process
+   
+  Arg: pid of process to retrieve
+   
+  return: Process that you are looking for
+*/
+struct Process* getProcess(int pid) {
+  //if (pid != shadowProcessTable[pid%MAXPROC].PID){createShadowProcess(pid); }  
+  return &shadowProcessTable[pid%MAXPROC];
+}
+
+
+
+void printCurrentMode() {
+
+  int psr = USLOSS_PsrGet();
+
+  if (psr == USLOSS_PSR_CURRENT_INT) {
+    USLOSS_Console("Currently in USER mode\n");
+  }
+  else {
+    USLOSS_Console("Currently in KERNEL mode\n"); 
+  }
+
+}
+
+void switchToUserMode(){
+
+    // Get current PSR
+int psr = USLOSS_PsrGet();  
+
+// Set user mode bit
+psr = USLOSS_PSR_CURRENT_INT;
+
+// Verify now in user mode  
+// if (psr == USLOSS_PSR_CURRENT_INT) {
+//   USLOSS_Console("Switched to user mode\n");
+// }
+// else {
+//   USLOSS_Console("Error setting user mode\n");
+// }
+
+// Update PSR
+USLOSS_PsrSet(psr);
+}
+
+void tramp(){
+    switchToUserMode();
+    struct Process* curProcess = getProcess(getpid()); 
+    // USLOSS_Console("%d\n")
+    int status = curProcess->startFunc(curProcess->arg);
+    Terminate(status);
 
 }
 
@@ -44,10 +146,21 @@ int kernSpawn(void *args){
     int stack_size = (int)(long)sysargs->arg3; // Dereference pointer to access arg3
     int priority = (int)(long)sysargs->arg4; // Dereference pointer to access arg3
     
-    sysargs->arg1 = (void*)(long) fork1(name, func, arg, stack_size, priority);
-    USLOSS_Console("PSR: %d\n",USLOSS_PsrGet());
-    start3_trampoline(func,arg);
-    // USLOSS_Console("stack size: %d\n", stack_size);
+    createShadowProcess(func,arg);
+    sysargs->arg1 = (void*)(long) fork1(name, tramp, arg, stack_size, priority);
+    //switchToUserMode();
+
+    
+    //printCurrentMode();
+    //switchToUserMode();
+    //printCurrentMode();
+
+    
+    //kernTerminate(args);
+    
+    
+
+    //func(arg);    // USLOSS_Console("stack size: %d\n", stack_size);
     // USLOSS_Console("name : %s\n", n);
     return 0;
 }
@@ -57,7 +170,6 @@ int kernWait(void *args){
     int status;
 
     int retVal = join(&status);
-
     if (retVal == -2){
         sysargs->arg4 = retVal;
         return;
@@ -68,17 +180,20 @@ int kernWait(void *args){
     sysargs->arg4 = 0;
 
 
-
     return 0;
 }
 
 int kernTerminate(void *args){
+
     USLOSS_Sysargs *sysargs = args; 
-    int status;
+    int s1 = sysargs->arg1;
+    int status = sysargs->arg1;
+    //USLOSS_Console("status: %d\n",status);
 
     while (join(&status) != -2){}
+    //USLOSS_Console("status: %d\n",status);
     sysargs->arg1 = status;
-    quit(status);
+    quit(s1);
     return 0;
 }
 
