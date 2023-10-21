@@ -11,6 +11,8 @@
 typedef void (*FunctionPointer)();
 
 int pidCounter = 5;
+int semCounter = 0;
+
 /*
   Struct that represents an individual process. Each field represents an
   attribute for a individual process. When a process is created, it's
@@ -27,8 +29,14 @@ struct Process {
     char* arg;
 };
 
+// struct Semaphore {
+//     int mboxID;
+//     int slotsLeft;
+// };
+
 // arrays
 static struct Process shadowProcessTable[MAXPROC];
+static int semaphoreTable[MAXSEMS];
 
 /*
     Description: Creates a process and sets its fields to the
@@ -53,7 +61,7 @@ int createShadowProcess(int (*func)(char*), void *arg) {
 
     shadowProcessTable[pidCounter%MAXPROC] = p;
     pidCounter ++;
-    return pidCounter--;
+    return pidCounter-1;
 }
 
 /*
@@ -112,13 +120,7 @@ int psr = USLOSS_PsrGet();
 // Set user mode bit
 psr = USLOSS_PSR_CURRENT_INT;
 
-// Verify now in user mode  
-// if (psr == USLOSS_PSR_CURRENT_INT) {
-//   USLOSS_Console("Switched to user mode\n");
-// }
-// else {
-//   USLOSS_Console("Error setting user mode\n");
-// }
+
 
 // Update PSR
 USLOSS_PsrSet(psr);
@@ -127,8 +129,12 @@ USLOSS_PsrSet(psr);
 void tramp(){
     switchToUserMode();
     struct Process* curProcess = getProcess(getpid()); 
-    // USLOSS_Console("%d\n")
+        // USLOSS_Console("HERE1 PID: %d  C: %d\n", getpid(), pidCounter);
+
+    // dumpSP();
     int status = curProcess->startFunc(curProcess->arg);
+        // USLOSS_Console("HERE2\n");
+
     Terminate(status);
 
 }
@@ -145,23 +151,12 @@ int kernSpawn(void *args){
     char* arg = (char*) sysargs->arg2;
     int stack_size = (int)(long)sysargs->arg3; // Dereference pointer to access arg3
     int priority = (int)(long)sysargs->arg4; // Dereference pointer to access arg3
-    
+        
+
     createShadowProcess(func,arg);
+    
     sysargs->arg1 = (void*)(long) fork1(name, tramp, arg, stack_size, priority);
-    //switchToUserMode();
 
-    
-    //printCurrentMode();
-    //switchToUserMode();
-    //printCurrentMode();
-
-    
-    //kernTerminate(args);
-    
-    
-
-    //func(arg);    // USLOSS_Console("stack size: %d\n", stack_size);
-    // USLOSS_Console("name : %s\n", n);
     return 0;
 }
 
@@ -184,7 +179,6 @@ int kernWait(void *args){
 }
 
 int kernTerminate(void *args){
-
     USLOSS_Sysargs *sysargs = args; 
     int s1 = sysargs->arg1;
     int status = sysargs->arg1;
@@ -197,15 +191,50 @@ int kernTerminate(void *args){
     return 0;
 }
 
-int kernSemCreate(void *args){
+int semCreate(int id){
+    for (int i = 0; i < MAXSEMS; i++){
+        if (semaphoreTable[i] == 0){
+            semaphoreTable[i] = id;
+            semCounter++;
+            return;
+        }
+    }
+    return -1;
+}
+
+int kernSemCreate(void* args) {
+    USLOSS_Sysargs *sysargs = args; 
+    int value = sysargs->arg1;
+    sysargs->arg4 = 0;
+    // Allocate new mailbox to use as semaphore
+    int mailboxID = MboxCreate(value, 0);
+    if (semCreate(mailboxID) == -1 || value < 0){
+        sysargs->arg4 = -1;
+        sysargs->arg1 =0;
+        return -1;
+    }
+    sysargs->arg1 = semCounter-1;
     return 0;
 }
 
 int kernSemP(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    int id = sysargs->arg1;
+    sysargs->arg4 = 0;
+    if (MboxRecv(id, NULL, NULL) == -1){
+        sysargs->arg4 = -1;
+    }
+
     return 0;
 }
 
 int kernSemV(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    int id = sysargs->arg1;
+    sysargs->arg4 = 0;
+    if (MboxSend(id, NULL, NULL) == -1){
+        sysargs->arg4 = -1;
+    }
     return 0;
 }
 
@@ -218,7 +247,8 @@ int kernCPUTime(void *args){
 }
 
 int kernGetPID(void *args){
-    return 0;
+    USLOSS_Sysargs *sysargs = args; 
+    sysargs->arg1 = getpid();
 }
 
 void phase3_init(){
