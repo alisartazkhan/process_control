@@ -213,42 +213,67 @@ int kernSemCreate(void* args) {
         sysargs->arg1 =0;
         return -1;
     }
+
+    // Send messages to mailbox to represent value
+    for(int i=0; i<value; i++) {
+        MboxSend(mailboxID, NULL, 0); 
+    }
+    //     USLOSS_Console("HERE111111\n");
+
+    // MboxRecv(mailboxID, NULL, NULL);
+    // MboxRecv(mailboxID, NULL, NULL);
+    // MboxRecv(mailboxID, NULL, NULL);
+
+    //     USLOSS_Console("HERE2222222\n");
+
     sysargs->arg1 = semCounter-1;
     return 0;
 }
 
 int kernSemP(void *args){
+    // unlock decrement
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
+    int mboxId = semaphoreTable[id];
     sysargs->arg4 = 0;
-    if (MboxRecv(id, NULL, NULL) == -1){
+    // USLOSS_Console("MBOX: %d\n", id);
+
+    if (MboxRecv(mboxId, NULL, NULL) == -1){
         sysargs->arg4 = -1;
     }
-
+    // USLOSS_Console("HERE2\n");
     return 0;
 }
 
 int kernSemV(void *args){
+    // lock increment
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
+    int mboxId = semaphoreTable[id];
+
     sysargs->arg4 = 0;
-    if (MboxSend(id, NULL, NULL) == -1){
+    if (MboxCondSend(mboxId, NULL, NULL) == -1){
         sysargs->arg4 = -1;
     }
     return 0;
 }
 
 int kernGetTimeofDay(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    sysargs->arg1 = currentTime();
     return 0;
 }
 
 int kernCPUTime(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    sysargs->arg1 = readtime();
     return 0;
 }
 
 int kernGetPID(void *args){
     USLOSS_Sysargs *sysargs = args; 
     sysargs->arg1 = getpid();
+    return 0;
 }
 
 void phase3_init(){

@@ -1,6 +1,5 @@
-/*
- * Three process semaphore test: three processes block on semaphore, and
- * then are released with three V's.
+/* test huge V amounts, to see if the user is *counting* the value, or if they
+ * are storing up messages in a mailbox.
  */
 
 #include <usloss.h>
@@ -9,61 +8,111 @@
 #include <phase2.h>
 #include <phase3_usermode.h>
 #include <stdio.h>
+#include <assert.h>
 
+
+
+/* will race for CPU time */
 int Child1(char *);
 int Child2(char *);
 
-int semaphore;
+/* low-priority child; only runs when the others block */
+int LP_Child(char *);
+
+
+
+/* each process saves its semaphore ID here.  The semaphores are not shared
+ * except at the very end; each process does N V-ops followed by N+1 P-ops;
+ * therefore, the last one blocks.  The low-priority process will supply the
+ * one missing V for each semaphore, but it cannot do that until both of the
+ * other child processes block.
+ */
+int sem1, sem2;
+
+#define N (250*1000)
+
 
 
 int start3(char *arg)
 {
-    int pid1,pid2,pid3, pid4;
-    int sem_result;
+    int pid;
+    int status;
 
-    USLOSS_Console("start3(): started.  Creating semaphore.\n");
+    sem1 = sem2 = -1;
 
-    sem_result = SemCreate(0, &semaphore);
-    if (sem_result != 0) {
-        USLOSS_Console("start3(): got non-zero semaphore result. Terminating...\n");
-        Terminate(1);
-    }
+    USLOSS_Console("start3(): started\n");
 
-    USLOSS_Console("start3(): calling Spawn for Child1 (three times)\n");
-    Spawn("Child1a", Child1, "Child1a", USLOSS_MIN_STACK, 2, &pid1);
-    Spawn("Child1b", Child1, "Child1b", USLOSS_MIN_STACK, 2, &pid2);
-    Spawn("Child1c", Child1, "Child1c", USLOSS_MIN_STACK, 2, &pid3);
-    USLOSS_Console("start3(): after spawn of %d %d %d\n", pid1,pid2,pid3);
+    Spawn("Child1", Child1, "Child1", USLOSS_MIN_STACK, 4, &pid);
+    USLOSS_Console("start3(): spawned the Child1 process %d\n", pid);
 
-    USLOSS_Console("start3(): calling Spawn for Child2\n");
-    Spawn("Child2", Child2, NULL, USLOSS_MIN_STACK, 2, &pid4);
-    USLOSS_Console("start3(): after spawn of %d\n", pid4);
+    Spawn("Child2", Child2, "Child2", USLOSS_MIN_STACK, 4, &pid);
+    USLOSS_Console("start3(): spawned the Child2 process %d\n", pid);
 
-    USLOSS_Console("start3(): Parent done. Calling Terminate.\n");
+    Spawn("LP_Child", LP_Child, "LP_Child", USLOSS_MIN_STACK, 5, &pid);
+    USLOSS_Console("start3(): spawned the low-priority process %d\n", pid);
+
+    Wait(&pid, &status);
+    USLOSS_Console("start3(): child %d returned status of %d\n", pid, status);
+
+    Wait(&pid, &status);
+    USLOSS_Console("start3(): child %d returned status of %d\n", pid, status);
+
+    Wait(&pid, &status);
+    USLOSS_Console("start3(): child %d returned status of %d\n", pid, status);
+
+    USLOSS_Console("start3(): done\n");
     Terminate(0);
 }
 
 
-int Child1(char *arg) 
-{
-    USLOSS_Console("%s(): starting, P'ing semaphore\n", arg);
-    SemP(semaphore);
-    USLOSS_Console("%s(): done\n", arg);
 
-    return 9;
+int Child_common_func(char *arg, int *sem, int retval);
+
+int Child1(char *arg)
+{
+    return Child_common_func(arg, &sem1, 1);
+}
+int Child2(char *arg)
+{
+    return Child_common_func(arg, &sem2, 2);
+}
+
+int Child_common_func(char *arg, int *sem, int retval)
+{
+    int rc = SemCreate(0, sem);
+    assert(rc == 0);
+
+    USLOSS_Console("%s(): Semaphore %d created.  I will now call V on it %d times.\n", arg, *sem, N);
+    for (int i=0; i<N; i++)
+    {
+        rc = SemV(*sem);
+        assert(rc == 0);
+    }
+
+    USLOSS_Console("%s(): V operations completed.  I will now call P on the semaphore the same number of times.\n", arg);
+    for (int i=0; i<N; i++)
+    {
+        rc = SemP(*sem);
+        assert(rc == 0);
+    }
+
+    USLOSS_Console("%s(): P operations completed.  I will now call P once more; this will force the process to block, until the Low-Priority Child is able to give us one more V operation.\n", arg);
+
+    rc = SemP(*sem);
+    assert(rc == 0);
+
+    USLOSS_Console("%s(): Last P operation has returned.  This process will terminate.\n", arg);
+    return retval;
 }
 
 
-int Child2(char *arg) 
-{
-    int pid;
-    GetPID(&pid);
 
-    USLOSS_Console("Child2(): %d starting, V'ing semaphore\n", pid );
-    SemV(semaphore);
-    SemV(semaphore);
-    SemV(semaphore);
-    USLOSS_Console("Child2(): done\n");
+int LP_Child(char *arg)
+{
+    USLOSS_Console("%s(): The low-priority child is finally running.  This must not happen until both Child1,Child2 have blocked on their last P operation.\n", arg);
+
+    SemV(sem1);
+    SemV(sem2);
 
     return 9;
 }
