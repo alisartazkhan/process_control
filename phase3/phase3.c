@@ -29,14 +29,15 @@ struct Process {
     char* arg;
 };
 
-// struct Semaphore {
-//     int mboxID;
-//     int slotsLeft;
-// };
+struct Semaphore {
+    int semID;
+    int mboxID;
+    int value;
+};
 
 // arrays
 static struct Process shadowProcessTable[MAXPROC];
-static int semaphoreTable[MAXSEMS];
+static struct Semaphore semaphoreTable[MAXSEMS];
 
 /*
     Description: Creates a process and sets its fields to the
@@ -191,10 +192,15 @@ int kernTerminate(void *args){
     return 0;
 }
 
-int semCreate(int id){
+int semCreate(int id, int val){
     for (int i = 0; i < MAXSEMS; i++){
-        if (semaphoreTable[i] == 0){
-            semaphoreTable[i] = id;
+        if (semaphoreTable[i].mboxID == 0){
+            struct Semaphore s = {
+                .mboxID = id,
+                .semID = i,
+                .value = val
+            };
+            semaphoreTable[i] = s;
             semCounter++;
             return;
         }
@@ -207,41 +213,45 @@ int kernSemCreate(void* args) {
     int value = sysargs->arg1;
     sysargs->arg4 = 0;
     // Allocate new mailbox to use as semaphore
-    int mailboxID = MboxCreate(value, 0);
-    if (semCreate(mailboxID) == -1 || value < 0){
+    int mailboxID = MboxCreate(0, 0);
+    // value might be value or 1
+    if (semCreate(mailboxID, value) == -1 || value < 0){
         sysargs->arg4 = -1;
         sysargs->arg1 =0;
         return -1;
     }
 
     // Send messages to mailbox to represent value
-    for(int i=0; i<value; i++) {
-        MboxSend(mailboxID, NULL, 0); 
-    }
-    //     USLOSS_Console("HERE111111\n");
-
-    // MboxRecv(mailboxID, NULL, NULL);
-    // MboxRecv(mailboxID, NULL, NULL);
-    // MboxRecv(mailboxID, NULL, NULL);
-
-    //     USLOSS_Console("HERE2222222\n");
-
+    // for(int i=0; i<value; i++) {
+    //     MboxSend(mailboxID, NULL, 0); 
+    // }
     sysargs->arg1 = semCounter-1;
     return 0;
 }
+
+//lock adds one to value
+// if value greater than equaal to 0, we unblock by recving to sems mb
+
+//sory my phone died one second
+//unlock subtracts one from value
+//if value less than 0, we block the process by sennding to sem's mb
 
 int kernSemP(void *args){
     // unlock decrement
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
-    int mboxId = semaphoreTable[id];
-    sysargs->arg4 = 0;
-    // USLOSS_Console("MBOX: %d\n", id);
+    struct Semaphore* sem = &semaphoreTable[id];
+    int mboxID = sem->mboxID;
+    USLOSS_Console("SEM: %d, VAL: %d\n", sem->semID, sem->value);
 
-    if (MboxRecv(mboxId, NULL, NULL) == -1){
-        sysargs->arg4 = -1;
+    sysargs->arg4 = 0;
+    if (sem->value < 0){
+        if (MboxSend(mboxID, NULL, NULL) == -1){
+            sysargs->arg4 = -1;
+            return;
+        }
     }
-    // USLOSS_Console("HERE2\n");
+    sem->value--;
     return 0;
 }
 
@@ -249,13 +259,22 @@ int kernSemV(void *args){
     // lock increment
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
-    int mboxId = semaphoreTable[id];
-
+    struct Semaphore* sem = &semaphoreTable[id];
+    int mboxID = sem->mboxID;
     sysargs->arg4 = 0;
-    if (MboxCondSend(mboxId, NULL, NULL) == -1){
-        sysargs->arg4 = -1;
+    if (sem->value < 0){
+        if (MboxRecv(mboxID, NULL, NULL) == -1){
+            sysargs->arg4 = -1;
+            return;
+        }
     }
+    sem->value++;
     return 0;
+}
+
+void printSemaphore(int id){
+    struct Semaphore* s = &semaphoreTable[id];
+    USLOSS_Console("Val: %d -------------\n", s->value);
 }
 
 int kernGetTimeofDay(void *args){

@@ -29,8 +29,8 @@ int LP_Child(char *);
  */
 int sem1, sem2;
 
-#define N (250*1000)
-
+// #define N (250*1000)
+ #define N (100)
 
 
 int start3(char *arg)
@@ -86,6 +86,7 @@ int Child_common_func(char *arg, int *sem, int retval)
     for (int i=0; i<N; i++)
     {
         rc = SemV(*sem);
+        // USLOSS_Console("i: %d\n");
         assert(rc == 0);
     }
 
@@ -97,6 +98,7 @@ int Child_common_func(char *arg, int *sem, int retval)
     }
 
     USLOSS_Console("%s(): P operations completed.  I will now call P once more; this will force the process to block, until the Low-Priority Child is able to give us one more V operation.\n", arg);
+    // printSemaphore(sem);
 
     rc = SemP(*sem);
     assert(rc == 0);
