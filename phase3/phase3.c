@@ -237,38 +237,55 @@ int kernSemCreate(void* args) {
 //if value less than 0, we block the process by sennding to sem's mb
 
 int kernSemP(void *args){
-    // unlock decrement
+    // lock decrement
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
     struct Semaphore* sem = &semaphoreTable[id];
     int mboxID = sem->mboxID;
-    USLOSS_Console("SEM: %d, VAL: %d\n", sem->semID, sem->value);
 
     sysargs->arg4 = 0;
+    sem->value--;
     if (sem->value < 0){
-        if (MboxSend(mboxID, NULL, NULL) == -1){
+        // USLOSS_Console("BLOCKED!!!\n");
+        // USLOSS_Console("IN P(): SEM: %d, VAL: %d\n", sem->semID, sem->value);
+        
+        int retVal = MboxRecv(mboxID, NULL, NULL);
+        if (retVal == -1){
             sysargs->arg4 = -1;
+            sem->value ++;
             return;
         }
     }
-    sem->value--;
+    
+    // USLOSS_Console("IN P(): SEM: %d, VAL: %d\n", sem->semID, sem->value);
+
     return 0;
 }
 
 int kernSemV(void *args){
-    // lock increment
+    // unlock increment
     USLOSS_Sysargs *sysargs = args; 
     int id = sysargs->arg1;
     struct Semaphore* sem = &semaphoreTable[id];
     int mboxID = sem->mboxID;
     sysargs->arg4 = 0;
-    if (sem->value < 0){
-        if (MboxRecv(mboxID, NULL, NULL) == -1){
+
+    
+    sem->value++;
+    if (sem->value <= 0){
+        // USLOSS_Console("UNBLOCKED!!!\n");
+        // USLOSS_Console("IN V(): SEM: %d, VAL: %d\n", sem->semID, sem->value);
+
+        int retVal = MboxSend(mboxID, NULL, NULL);
+        if (retVal == -1){
             sysargs->arg4 = -1;
+            sem->value--;
             return;
         }
     }
-    sem->value++;
+    
+    // USLOSS_Console("IN V(): SEM: %d, VAL: %d\n", sem->semID, sem->value);
+
     return 0;
 }
 
