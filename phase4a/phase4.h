@@ -15,7 +15,7 @@ extern void phase4_init(void);
  * kernel mode interfaces to the same mechanisms as the syscalls
  */
 
-extern  int  kernSleep(USLOSS_Sysargs * seconds);
+extern  int  kernSleep(int seconds);
 
 extern  int  kernDiskRead (void *diskBuffer, int unit, int track, int first, 
                            int sectors, int *status);

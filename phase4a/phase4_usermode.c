@@ -36,6 +36,8 @@ int Sleep(int seconds)
     sysArg.number = SYS_SLEEP;
     sysArg.arg1 = (void *) ( (long) seconds);
 
+    USLOSS_Console("sleep time: %d\n",seconds);
+
     USLOSS_Syscall(&sysArg);
 
     return (long) sysArg.arg4;
