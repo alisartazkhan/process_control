@@ -11,21 +11,13 @@
 #include <phase4.h>
 
 
-int ourSleep(void*);
+void ourSleep();
 
-struct Process {
-    int PID;
-    int mboxID;
-    int endSleep;
-    struct Process * next;
-};
-
-
-static struct Process shadowProcessTable[MAXPROC];
-static struct Process * priorityQueueHead = NULL;
 
 void phase4_init(void) {
+    //USLOSS_IntVec[USLOSS_CLOCK_INT] = daemonProcess;
     systemCallVec[SYS_SLEEP] = ourSleep;
+    
     //systemCallVec[SYS_TERMREAD] = ourTermRead;
     //systemCallVec[SYS_TERMWRITE] = ourTermWrite;
     //systemCallVec[SYS_DISKREAD] = ourDiskRead;
@@ -33,130 +25,34 @@ void phase4_init(void) {
     //systemCallVec[SYS_DISKSIZE] = ourDiskSize;
 }
 
-void daemonProcess(){
 
-}
-
-
-void phase4_start_service_processes(){}
-
-int printProc(struct Process * cur){
-
-    USLOSS_Console(" id: %d endSleep %d -->",cur->PID,cur->endSleep);
-
-}
-
-int dumpPriorityQueue(){
+void daemonProcess() {
+    int status = -1;
+    while(1) {
+        USLOSS_Console("hello");
+    waitDevice(USLOSS_CLOCK_DEV, 0, &status);
     
-    struct Process * cur = priorityQueueHead;
-    USLOSS_Console("\nPrinting Queue\n");
-    while (cur != NULL){
-        printProc(cur);
-        cur = cur->next;
-    }
-
-    USLOSS_Console("\nEnding p Queue\n\n");
-
+    } return 0;
 }
 
-int createShadowProcess(int es, int pid) {
-    struct Process p = {
-        .PID = pid, 
-        .mboxID = MboxCreate(0,0),
-        .endSleep = es,
-        .next = NULL
 
-    };
+void phase4_start_service_processes(){
+
+    int status;
+    fork1("daemon", daemonProcess, NULL, USLOSS_MIN_STACK, 1);
+    dumpProcesses();
 
 
-    shadowProcessTable[p.PID%MAXPROC] = p;
-    dumpSP();
-    return p.PID;
-}
-
-void dumpSP(void){
-    USLOSS_Console("\n DUMPING PROC\n");
-    for (int i = 0; i < MAXPROC; i++){
-         if ( shadowProcessTable[i].PID == 0){
-             continue;
-         }
-        USLOSS_Console("PID: %d endSleep: %d \n",shadowProcessTable[i].PID, shadowProcessTable[i].endSleep);
-
-    }
-    USLOSS_Console(" END OF DUMP PROC\n\n");
-
-}
-
-struct Process* getProcess(int pid, int seconds) {
-    
-    if (pid != shadowProcessTable[pid%MAXPROC].PID){createShadowProcess(seconds,pid); }  
-  return &shadowProcessTable[pid%MAXPROC];
-}
-
-struct Process* getProcess1(int pid) {
-    
-  return &shadowProcessTable[pid%MAXPROC];
-}
-
-void addToPriorityQueue(int pid){
-    struct Process * p = getProcess1(pid);
-
-    int priority = p->endSleep;
-
-
-    // # If the list is empty or the new node has higher priority than the current head
-    if (priorityQueueHead == NULL){
-        priorityQueueHead = p;
-
-    }
-    // else if (priority < priorityQueueHead->endSleep){
-    //     struct Process * temp = priorityQueueHead;
-    //     priorityQueueHead = p;
-    //     p->next = temp;
-    // }
-
-    else{
-        struct Process * current = priorityQueueHead;
-        while (current->next != NULL && current->next->endSleep <= priority){
-            current = current->next;
-            }
-        p->next = current->next;
-        current->next = p;
-        
-    }
 }
 
 int kernSleep(int seconds) {
     return 0;
 }
 
-int ourSleep(void *args) {
-    int startTime = currentTime();
+void ourSleep() {
 
-    USLOSS_Sysargs *sysargs = args; 
-    int seconds = sysargs->arg1;
-
-    int endTime = seconds*1000000+startTime;
-
-    struct Process * p = getProcess(getpid(),endTime);
-
-
-    USLOSS_Console("Inside Our Sleep %d\n", p->endSleep);
-
-    //dumpSP();
-
-    addToPriorityQueue(getpid());
-    //addToPriorityQueue(3);
-
-
-    dumpPriorityQueue();
-
-    //MboxSend(p->mboxID,NULL,0);
-
-
-//// kernSleep(5) laisdjflasjdf alsdfj  kernSLeep(5)
-
-
+    USLOSS_Console("inside sleep\n");
+    
     return 0;
 }
 
