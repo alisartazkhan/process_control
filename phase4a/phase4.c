@@ -19,6 +19,7 @@ int DAEMON_TERMINAL3_PID = -1;
 int DAEMON_DISK0_PID = -1;
 int DAEMON_DISK1_PID = -1;
 
+int TERM_LOCK_MBOX_ID = -1;
 
 int TERM_MBOX_ARRAY[4];
 
@@ -118,12 +119,17 @@ void termMain(int unit){
 }
 void termMain2(int unit){
     // enableInterrupts();
-    USLOSS_Console("INSIDE THE TERM MAIN() | UNIT: %d\n", unit);
+    // USLOSS_Console("INSIDE THE TERM MAIN() | UNIT: %d\n", unit);
+
+        MboxRecv(TERM_LOCK_MBOX_ID, NULL, NULL); // lock
+
+    dumpProcesses();
     int status = -1;
 
     char *buffer = (char *)calloc(MAXLINE, sizeof(char));
     int bufferIndex = 0;
     while (1) {
+
         USLOSS_Console("INSIDE THE TERM MAIN() LOOP | UNIT: %d\n", unit);
         waitDevice(USLOSS_TERM_DEV, unit, &status);
         USLOSS_Console("After waitDevice()\n", unit);
@@ -131,7 +137,7 @@ void termMain2(int unit){
         char character = (char) USLOSS_TERM_STAT_CHAR(status);
         buffer[bufferIndex] = character;
         bufferIndex ++;
-        USLOSS_Console("CHARS READ: %d | String: %s\n", bufferIndex, buffer);
+        USLOSS_Console("CHARS READ: %d | String: %s\n\n", bufferIndex, buffer);
 
         if (character == '\n'|| bufferIndex == MAXLINE){
             MboxCondSend(TERM_MBOX_ARRAY[unit], buffer, bufferIndex);
@@ -143,8 +149,10 @@ void termMain2(int unit){
         // add char received from waitDevice to buffer
         // if buffer is now full or gets to newLine, cond send to mb
         // reset buffer and words
-        
+
     }
+
+        MboxSend(TERM_LOCK_MBOX_ID, NULL, NULL); // unlock
 
 
 }
@@ -163,23 +171,26 @@ void removeFromPriorityQueue(){
 
 
 void phase4_start_service_processes(){
-    int ctrl = 0x1; // 0 is the initial control value, you may use the current value
-    ctrl |= 0x2;
-    ctrl |= 0x4;
+    int ctrl = 0x7; // 0 is the initial control value, you may use the current value
+    // ctrl |= 0x2;
+    // ctrl |= 0x7;
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 0, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 1, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 2, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 3, (void*)(long)ctrl) == USLOSS_DEV_OK);
 
 
+
+
     DAEMON_CLOCK_PID = fork1("DAEMON", daemonProcessMain, NULL, USLOSS_MIN_STACK, 1);
-    // DAEMON_TERMINAL0_PID = fork1("TERM0", termMain2, 0, USLOSS_MIN_STACK, 1);
-    // DAEMON_TERMINAL1_PID = fork1("TERM1", termMain2, 1, USLOSS_MIN_STACK, 1);
+    DAEMON_TERMINAL0_PID = fork1("TERM0", termMain2, 0, USLOSS_MIN_STACK, 1);
+    DAEMON_TERMINAL1_PID = fork1("TERM1", termMain2, 1, USLOSS_MIN_STACK, 1);
     DAEMON_TERMINAL2_PID = fork1("TERM2", termMain2, 2, USLOSS_MIN_STACK, 1);
-    // DAEMON_TERMINAL3_PID = fork1("TERM3", termMain2, 3, USLOSS_MIN_STACK, 1);
+    DAEMON_TERMINAL3_PID = fork1("TERM3", termMain2, 3, USLOSS_MIN_STACK, 1);
     DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
     DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
 
+    TERM_LOCK_MBOX_ID = MboxCreate(1, 0);
 
     TERM_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
     TERM_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
