@@ -418,7 +418,7 @@ int kernTermRead(char *buffer, int bufferSize, int unitID, int *numCharsRead) {
 
 
 /*
-Description: function for kernTermWrite, but is not used. Just included so the code
+Description: function for kernTermWrite , but is not used. Just included so the code
 compiless because this function is in the phase4a.h file.
 */
 int kernTermWrite(char *buffer, int bufferSize, int unitID, int *numCharsRead) {
