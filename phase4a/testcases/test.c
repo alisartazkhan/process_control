@@ -64,15 +64,3 @@ int XXterm2(char *arg)
     Terminate(4);
 }
 
-
-
-//waitdevice() adds a char to next available buffer
-//when we get to a newling or maxchar we send that buffer
-
-//term read will call rec
-
-
-
-
-
-//term write will read from mb

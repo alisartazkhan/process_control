@@ -82,10 +82,17 @@ void daemonProcessMain(){
     // USLOSS_Console("INSIDE THE DAEMON MAIN()\n");
     int status = -1;
     while (1) {
-        // USLOSS_Console("INSIDE THE DAEMON MAIN() loop\n");
+        // USLOSS_Console("INSIDE THE DAEMON MAIN() louroop\n");
         waitDevice(USLOSS_CLOCK_DEV, 0, &status);
-        // USLOSS_Console("GLOBAL CLOCK TICKS: %d\n", GLOBAL_CLOCK_TICKS);
+        //USLOSS_Console("Wait Device returned ");
+        //dumpPriorityQueue();
+        //USLOSS_Console("GLOBAL CLOCK TICKS: %d\n", GLOBAL_CLOCK_TICKS);
         GLOBAL_CLOCK_TICKS ++;
+
+        if (GLOBAL_CLOCK_TICKS % 10 == 0 && GLOBAL_CLOCK_TICKS < 4 * 10){
+            //USLOSS_Console("Global Clock tick: %d\n",GLOBAL_CLOCK_TICKS/10);
+            // dumpPriorityQueue();
+        }
         removeFromPriorityQueue();
     }
 
@@ -101,6 +108,7 @@ void termMain(int unit){
         waitDevice(USLOSS_TERM_DEV, unit, &status);
         // debug("status: %d", status);
         int received = USLOSS_TERM_STAT_RECV(status);
+        
         if(received) {
             int ch =  USLOSS_TERM_STAT_CHAR(status);
             debug("received: %d recv status: %d",  ch, received);
@@ -121,25 +129,27 @@ void termMain2(int unit){
     // enableInterrupts();
     // USLOSS_Console("INSIDE THE TERM MAIN() | UNIT: %d\n", unit);
 
-        MboxRecv(TERM_LOCK_MBOX_ID, NULL, NULL); // lock
+        //MboxRecv(TERM_LOCK_MBOX_ID, NULL, NULL); // lock
 
-    dumpProcesses();
+    //dumpProcesses();
     int status = -1;
 
     char *buffer = (char *)calloc(MAXLINE, sizeof(char));
     int bufferIndex = 0;
     while (1) {
 
-        USLOSS_Console("INSIDE THE TERM MAIN() LOOP | UNIT: %d\n", unit);
+        //USLOSS_Console("INSIDE THE TERM MAIN() LOOP | UNIT: %d\n", unit);
+        //USLOSS_Console("last thing to happen for this unit: %d\n",unit);
         waitDevice(USLOSS_TERM_DEV, unit, &status);
-        USLOSS_Console("After waitDevice()\n", unit);
+        //USLOSS_Console("After waitDevice()\n", unit);
 
         char character = (char) USLOSS_TERM_STAT_CHAR(status);
         buffer[bufferIndex] = character;
         bufferIndex ++;
-        USLOSS_Console("CHARS READ: %d | String: %s\n\n", bufferIndex, buffer);
+        //USLOSS_Console("CHARS READ: %d | String: %s\n\n", bufferIndex, buffer);
 
         if (character == '\n'|| bufferIndex == MAXLINE){
+            //USLOSS_Console("about to end maybe\n");
             MboxCondSend(TERM_MBOX_ARRAY[unit], buffer, bufferIndex);
             free(buffer);
             buffer = (char *)calloc(MAXLINE, sizeof(char));
@@ -152,7 +162,7 @@ void termMain2(int unit){
 
     }
 
-        MboxSend(TERM_LOCK_MBOX_ID, NULL, NULL); // unlock
+        //MboxSend(TERM_LOCK_MBOX_ID, NULL, NULL); // unlock
 
 
 }
@@ -160,10 +170,13 @@ void termMain2(int unit){
 
 void removeFromPriorityQueue(){
     int curTime = GLOBAL_CLOCK_TICKS * 100;
-
     while (priorityQueueHead != NULL && curTime >= priorityQueueHead->endSleep){
+        //USLOSS_Console("Inside REMOVE PQUEUE -------------------------");
+        //dumpPriorityQueue();
+
         struct Process* p = priorityQueueHead;
         priorityQueueHead = priorityQueueHead -> next;
+        //dumpPriorityQueue();
         int mboxID = p->mboxID;
         MboxRecv(mboxID, NULL, NULL);
     }
@@ -171,7 +184,7 @@ void removeFromPriorityQueue(){
 
 
 void phase4_start_service_processes(){
-    int ctrl = 0x7; // 0 is the initial control value, you may use the current value
+    int ctrl = 0x6; // 0 is the initial control value, you may use the current value
     // ctrl |= 0x2;
     // ctrl |= 0x7;
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 0, (void*)(long)ctrl) == USLOSS_DEV_OK);
@@ -244,7 +257,8 @@ int createShadowProcess(int es, int pid) {
     return p.PID;
 }
 
-
+//clean up mailbox
+//update endtime
 
 struct Process* getProcess(int pid, int seconds) {
     
@@ -252,6 +266,8 @@ struct Process* getProcess(int pid, int seconds) {
         // USLOSS_Console("CREATING SHADOW PROC\n");
         createShadowProcess(seconds,pid); 
     }
+    (&shadowProcessTable[pid%MAXPROC])->endSleep = seconds;
+
 
     return &shadowProcessTable[pid%MAXPROC];
 }
@@ -272,11 +288,11 @@ void addToPriorityQueue(int pid){
         priorityQueueHead = p;
 
     }
-    // else if (priority < priorityQueueHead->endSleep){
-    //     struct Process * temp = priorityQueueHead;
-    //     priorityQueueHead = p;
-    //     p->next = temp;
-    // }
+    else if (priority <= priorityQueueHead->endSleep){
+        struct Process * temp = priorityQueueHead;
+        priorityQueueHead = p;
+        p->next = temp;
+    }
 
     else{
         struct Process * current = priorityQueueHead;
@@ -296,13 +312,15 @@ int ourSleep(void *args) {
 // dumpSP();
     int startTime = GLOBAL_CLOCK_TICKS * 100;
 
+    //dumpProcesses();
+
     USLOSS_Sysargs *sysargs = args; 
     int seconds = sysargs->arg1;
     // USLOSS_Console("Inside Our Sleep %d\n", p->endSleep);
 
 
     int endTime = seconds*1000 + startTime;
-
+    //USLOSS_Console("our sleep is called: startTime: %d endtime: %d seconds:%d pid:%d \n",startTime,endTime,seconds,getpid());
     struct Process * p = getProcess(getpid(), endTime);
     addToPriorityQueue(getpid());
     // dumpPriorityQueue();
@@ -310,6 +328,7 @@ int ourSleep(void *args) {
     // USLOSS_Console("BLOCKING PROC\n");
     MboxSend(p->mboxID, NULL, NULL);
 
+    // USLOSS_Console("sleep ended\n");
 
 
     return 0;
@@ -338,7 +357,7 @@ int ourTermRead(void *args){
     // memset(buffer, 'x', sizeof(bufferSize)-1);
     // buffer[bufferSize] = '\0';
     MboxRecv(TERM_MBOX_ARRAY[unitID], buffer, bufferSize);
-    USLOSS_Console("MESSAGE: %s\n", buffer);
+    //USLOSS_Console("MESSAGE: %s\n", buffer);
 
     sysargs->arg2 = strlen(buffer);
     sysargs->arg4 = 0;   

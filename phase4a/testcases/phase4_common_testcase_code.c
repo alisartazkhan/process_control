@@ -71,7 +71,6 @@ static int testcase_timeout_proc(char *ignored)
         USLOSS_Console("ERROR: Could not disable kernel mode.\n");
         USLOSS_Halt(1);
     }
-
     Sleep(1);
     Sleep(testcase_timeout-1);
 
