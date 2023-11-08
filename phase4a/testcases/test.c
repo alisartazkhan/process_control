@@ -1,5 +1,10 @@
-#include <stdlib.h>
+/* TERMTEST
+ * Test reading from a terminal which doesn't have as many bytes as we ask for.
+ */
+
 #include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
 #include <usloss.h>
 #include <usyscall.h>
@@ -11,45 +16,63 @@
 #include <phase4.h>
 #include <phase4_usermode.h>
 
-
-
-#define ABS(a,b) (a-b > 0 ? a-b : -(a-b))
-
-
-
-int Child(char *arg) 
-{
-    int me = atoi(arg);
-    USLOSS_Console("Child%d(): started, calling Terminate\n", me);
-    Terminate(1);
-}
+int XXterm2(char *arg);
 
 
 
 int start4(char *arg)
 {
-    int begin, end, time;
-  
+    int kidpid, pid, status;
+    
     USLOSS_Console("start4(): started\n");
-    USLOSS_Console("          going to sleep for 5 seconds.\n");
-
-    GetTimeofDay(&begin);
-
-    USLOSS_Console("start4(): Sleep starts at %6d\n", begin);
-    Sleep(5);
-
-    GetTimeofDay(&end);
-    time = end - begin;
-    time = ABS(5000000, time);
-    if (time > 1000000) {
-        USLOSS_Console("start4(): Sleep bad: %d %d\n",
-                       time, ABS(10000000, time));
-    }
-    else {
-        USLOSS_Console("start4(): Sleep done at %8d\n", end);
-    }
-
-    USLOSS_Console("start4(): done.\n");
+  
+    status=Spawn("XXterm2", XXterm2, NULL, USLOSS_MIN_STACK, 4, &kidpid);
+    assert(status==0);
+  
+    Wait(&pid, &status);
+  
+    USLOSS_Console("start4(): XXterm2 completed. kidpid = %d, pid = %d\n", kidpid, pid);
     Terminate(0);
 }
 
+
+
+int XXterm2(char *arg)
+{
+    int j, len;
+    char data[256];
+    int result;
+  
+    USLOSS_Console("XXterm2(): started\n");
+
+    // line 0, does not have as many bytes as we asked for
+    len = 0;
+    bzero(data, 256);
+    USLOSS_Console("XXterm2(): reading a line from terminal 2\n");
+    result = TermRead(data, 80, 2, &len);  // ask for 80 bytes
+    if (result < 0)
+        USLOSS_Console("XXterm2(): ERROR: TermRead returned %d\n", result);
+
+    USLOSS_Console("XXterm2(): after TermRead()\n");
+    USLOSS_Console("XXterm2(): term2 read   %d bytes (hex): ", len);
+    for (j = 0; j < len; j++)
+        USLOSS_Console(" %02x", data[j]);
+    USLOSS_Console("\n");
+    USLOSS_Console("                 strlen %d buf  (text): '%s'\n", strlen(data), data);
+  
+    USLOSS_Console("XXterm2(): Terminating\n");
+    Terminate(4);
+}
+
+
+
+//waitdevice() adds a char to next available buffer
+//when we get to a newling or maxchar we send that buffer
+
+//term read will call rec
+
+
+
+
+
+//term write will read from mb

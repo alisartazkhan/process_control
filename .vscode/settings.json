@@ -2,6 +2,7 @@
     "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
         "stdio.h": "c",
-        "phase3_usermode.h": "c"
+        "phase3_usermode.h": "c",
+        "phase4_usermode.h": "c"
     }
 }
