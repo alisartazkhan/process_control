@@ -1,9 +1,7 @@
-/* TERMTEST
- * Read exactly 13 bytes from term 1. Display the bytes to stdout.
- */
-
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <usloss.h>
 #include <usyscall.h>
@@ -15,37 +13,66 @@
 #include <phase4.h>
 #include <phase4_usermode.h>
 
-char buf[256];
 
 
+int Child1(char *arg)
+{
+    int term = atoi(arg);
+    char buf[MAXLINE + 1] = "";
+    int result, read_length;
+    int i, size;
+
+    USLOSS_Console("Child%d(): start\n", term);
+
+    for (i = 0; i< 10; i++)
+    {
+        memset(buf, 'x', sizeof(buf));
+
+        int rc = TermRead(buf, MAXLINE, term, &read_length);
+        if (rc < 0)
+        {
+            USLOSS_Console("ERROR: ReadTeam\n");
+            return -1;
+        }
+
+        buf[read_length] = '\0';
+        USLOSS_Console("Child%d(): buffer read from term%d   '%s'\n", term, term, buf);
+
+        result = TermWrite(buf, strlen(buf), term, &size);
+        if (result < 0 || size != strlen(buf))
+        {
+            USLOSS_Console("\n ***** Child(%d): got bad result = %d ", term, result);
+            USLOSS_Console("or bad size = %d! *****\n\n ", size);
+        }
+    }
+
+    USLOSS_Console("Child%d(): done\n", term);
+    Terminate(0);
+}
+
+
+
+extern int testcase_timeout;   // defined in the testcase common code
 
 int start4(char *arg)
 {
-    int j, length;
-    char dataBuffer[256];
-    int result;
-  
-    USLOSS_Console("start4(): Read from terminal 1, but ask for fewer chars than are present on the first line.\n");
+    int  pid, status;
+    char buf[12];
+    char child_buf[12];
 
-    length = 0;
-    memset(dataBuffer, 'a', 256);  // Fill dataBuffer with a's
-    dataBuffer[254] = '\n';
-    dataBuffer[255] = '\0';
+    testcase_timeout = 60;
 
-    result = TermRead(dataBuffer, 13, 1, &length);
-    if (result < 0)
-    {
-        USLOSS_Console("start4(): ERROR from Readterm, result = %d\n", result);
-        Terminate(1);
-    }	
+    USLOSS_Console("start4(): Spawn one child.\n");
 
-    USLOSS_Console("start4(): term1 read %d bytes, first 13 bytes: '", length);
-    USLOSS_Console(buf);
-    for (j = 0; j < 13; j++)
-        USLOSS_Console("%c", dataBuffer[j]);	    
-    USLOSS_Console("'\n");
-  
-    USLOSS_Console("start4(): simple terminal test is done.\n");
+    sprintf(buf, "%d", 0);
+    sprintf(child_buf, "Child%d", 0);
+    status = Spawn(child_buf, Child1, buf, USLOSS_MIN_STACK,2, &pid);
+    assert(status == 0);
+
+    Wait(&pid, &status);
+    assert(status == 0);
+
+    USLOSS_Console("start4(): done.\n");
     Terminate(0);
 }
 

@@ -3,6 +3,7 @@
     "files.associations": {
         "stdio.h": "c",
         "phase3_usermode.h": "c",
-        "phase4_usermode.h": "c"
+        "phase4_usermode.h": "c",
+        "phase1.h": "c"
     }
 }

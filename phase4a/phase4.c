@@ -19,14 +19,17 @@ int DAEMON_TERMINAL3_PID = -1;
 int DAEMON_DISK0_PID = -1;
 int DAEMON_DISK1_PID = -1;
 
-int TERM_LOCK_MBOX_ID = -1;
 
-int TERM_MBOX_ARRAY[4];
 
+int TERM_LOCK_MBOX_ARRAY[4];
+int TERM_READ_MBOX_ARRAY[4];
+int TERM_WRITE_MBOX_ARRAY[4];
+int READ_BUFFER_SIZE = -1;
 
 
 int ourSleep(void*);
 int ourTermRead(void*);
+int ourTermWrite(void*);
 
 struct Process {
     int PID;
@@ -46,7 +49,7 @@ void phase4_init(void) {
 
     systemCallVec[SYS_SLEEP] = ourSleep;
     systemCallVec[SYS_TERMREAD] = ourTermRead;
-    //systemCallVec[SYS_TERMWRITE] = ourTermWrite;
+    systemCallVec[SYS_TERMWRITE] = ourTermWrite;
     //systemCallVec[SYS_DISKREAD] = ourDiskRead;
     //systemCallVec[SYS_DISKWRITE] = ourDiskWrite;
     //systemCallVec[SYS_DISKSIZE] = ourDiskSize;
@@ -114,7 +117,7 @@ void termMain(int unit){
             debug("received: %d recv status: %d",  ch, received);
             buffer[i] = (char)ch;   i++;
             if(ch == newLine || i == MAXLINE) { // time to deliver
-                MboxSend(TERM_MBOX_ARRAY[unit], (void*)buffer, i);
+                MboxSend(TERM_READ_MBOX_ARRAY[unit], (void*)buffer, i);
                 //clear buffer
                 buffer[0] = '\0'; i =0;
             }
@@ -126,45 +129,51 @@ void termMain(int unit){
     return 1;
 }
 void termMain2(int unit){
-    // enableInterrupts();
-    // USLOSS_Console("INSIDE THE TERM MAIN() | UNIT: %d\n", unit);
-
-        //MboxRecv(TERM_LOCK_MBOX_ID, NULL, NULL); // lock
-
-    //dumpProcesses();
     int status = -1;
 
-    char *buffer = (char *)calloc(MAXLINE+1, sizeof(char));
+    char *buffer = (char *)calloc(MAXLINE, sizeof(char));
     int bufferIndex = 0;
+    // char* writeBuffer = (char *)calloc(MAXLINE, sizeof(char));
+    // memset(writeBuffer, '\0', MAXLINE);  // Fill dataBuffer with a's
+    // writeBuffer[254] = '\0';
+
     while (1) {
+        int transmitBit = USLOSS_TERM_STAT_XMIT(status);
+        if (transmitBit == USLOSS_DEV_READY){
+            MboxCondSend(TERM_WRITE_MBOX_ARRAY[unit],NULL, 0);
+
+            // MboxCondSend(TERM_WRITE_MBOX_ARRAY[unit], NULL, 0);
+        } else if (transmitBit == USLOSS_DEV_ERROR){
+            USLOSS_Console("ERROR: theres sth wrong with writing the registers\n");
+            USLOSS_Halt(1);
+        }
 
         //USLOSS_Console("INSIDE THE TERM MAIN() LOOP | UNIT: %d\n", unit);
         //USLOSS_Console("last thing to happen for this unit: %d\n",unit);
         waitDevice(USLOSS_TERM_DEV, unit, &status);
         //USLOSS_Console("After waitDevice()\n", unit);
+        int readBit = USLOSS_TERM_STAT_RECV(status);
+        if (readBit == USLOSS_DEV_BUSY){
+            char character = (char) USLOSS_TERM_STAT_CHAR(status);
+            buffer[bufferIndex] = character;
+            bufferIndex ++;
+            //USLOSS_Console("CHARS READ: %d | String: %s\n\n", bufferIndex, buffer);
 
-        char character = (char) USLOSS_TERM_STAT_CHAR(status);
-        buffer[bufferIndex] = character;
-        bufferIndex ++;
-        //USLOSS_Console("CHARS READ: %d | String: %s\n\n", bufferIndex, buffer);
-
-        if (character == '\n'|| bufferIndex == MAXLINE){
-            //USLOSS_Console("about to end maybe\n");
-            MboxCondSend(TERM_MBOX_ARRAY[unit], buffer, bufferIndex);
-            free(buffer);
-            buffer = (char *)calloc(MAXLINE, sizeof(char));
-            bufferIndex = 0;
-        } 
-
-        // add char received from waitDevice to buffer
-        // if buffer is now full or gets to newLine, cond send to mb
-        // reset buffer and words
+            if (character == '\n'|| bufferIndex == MAXLINE || bufferIndex == READ_BUFFER_SIZE){
+                //USLOSS_Console("about to end maybe\n");
+                buffer[bufferIndex] = '\0';
+                // USLOSS_Console("String: %s\n", buffer);
+                MboxCondSend(TERM_READ_MBOX_ARRAY[unit], buffer, bufferIndex);
+                free(buffer);
+                buffer = (char *)calloc(MAXLINE, sizeof(char));
+                bufferIndex = 0;
+            } 
+        } else if (readBit == USLOSS_DEV_ERROR){
+            USLOSS_Console("ERROR: theres sth wrong with reading the registers\n");
+            USLOSS_Halt(1);
+        }
 
     }
-
-        //MboxSend(TERM_LOCK_MBOX_ID, NULL, NULL); // unlock
-
-
 }
 
 
@@ -203,12 +212,21 @@ void phase4_start_service_processes(){
     DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
     DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
 
-    TERM_LOCK_MBOX_ID = MboxCreate(1, 0);
+    TERM_LOCK_MBOX_ARRAY[0] = MboxCreate(1, 0);
+    TERM_LOCK_MBOX_ARRAY[1] = MboxCreate(1, 0);
+    TERM_LOCK_MBOX_ARRAY[2] = MboxCreate(1, 0);
+    TERM_LOCK_MBOX_ARRAY[3] = MboxCreate(1, 0);
 
-    TERM_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
-    TERM_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
-    TERM_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
-    TERM_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
+
+    TERM_READ_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
+    TERM_READ_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
+    TERM_READ_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
+    TERM_READ_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
+
+    TERM_WRITE_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
+    TERM_WRITE_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
+    TERM_WRITE_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
+    TERM_WRITE_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
     
 }
 
@@ -305,6 +323,46 @@ void addToPriorityQueue(int pid){
     }
 }
 
+void lockTerminal(int unit){
+    // USLOSS_Console("LOCKING TERMINAL %d\n", unit);
+    MboxSend(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
+}
+
+void unlockTerminal(int unit){
+    // USLOSS_Console("UNLOCKING TERMINAL %d\n", unit);
+    MboxRecv(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
+}
+
+
+void writeCharToTerminal(char character, int unit){
+    int cr_val = 0x1; // this turns on the ’send char’ bit (USLOSS spec page 9)
+    cr_val |= 0x2; // recv int enable
+    cr_val |= 0x4; // xmit int enable
+    cr_val |= (character << 8); // the character to send
+    USLOSS_DeviceOutput(USLOSS_TERM_DEV, unit, (void*)(long)cr_val);
+
+}
+int ourTermWrite(void* args){
+    USLOSS_Sysargs *sysargs = args; 
+    char* buffer = sysargs->arg1;
+    int bufferSize = sysargs->arg2;
+    int unitID = sysargs->arg3;
+
+    lockTerminal(unitID);
+    // USLOSS_Console("BUFFER IN WRITE: %s", buffer);
+    for(int i = 0; i < bufferSize; i++) {
+        MboxRecv(TERM_WRITE_MBOX_ARRAY[unitID], NULL, 0); 
+        writeCharToTerminal(buffer[i], unitID); 
+    }
+
+    // MboxCondSend(TERM_WRITE_MBOX_ARRAY[unitID], buffer, bufferSize);
+
+    sysargs->arg4 = 0; 
+    sysargs->arg2 = strlen(buffer);
+
+    unlockTerminal(unitID);
+    return 0;
+}
 
 int ourSleep(void *args) {
 
@@ -345,6 +403,7 @@ int ourTermRead(void *args){
     USLOSS_Sysargs *sysargs = args; 
     int bufferSize = sysargs->arg2;
     char *buffer = sysargs->arg1;
+    READ_BUFFER_SIZE = bufferSize;
     int unitID = sysargs->arg3;
     // USLOSS_Console("UNIT: %d\n", unitID);
     // Check for invalid terminal 
@@ -352,15 +411,17 @@ int ourTermRead(void *args){
         sysargs->arg4 = -1;
         return -1;
     }
-    // MboxSend(TERM_MBOX_ARRAY[unitID], "hello there", strlen("hello there")+1);
+    // MboxSend(TERM_READ_MBOX_ARRAY[unitID], "hello there", strlen("hello there")+1);
     
     // memset(buffer, 'x', sizeof(bufferSize)-1);
     // buffer[bufferSize] = '\0';
-    MboxRecv(TERM_MBOX_ARRAY[unitID], buffer, bufferSize);
-    //USLOSS_Console("MESSAGE: %s\n", buffer);
+    memset(buffer, '\0', 256);
+    MboxRecv(TERM_READ_MBOX_ARRAY[unitID], buffer, bufferSize);
+    // USLOSS_Console("MESSAGE: %s\n", buffer);
     // USLOSS_Console("STRING: %s\n", buffer);
 
-    sysargs->arg2 = bufferSize;
+    // if (buffer)
+    sysargs->arg2 = strlen(buffer);
     sysargs->arg4 = 0;   
     return 0;
 }
