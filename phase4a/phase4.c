@@ -134,7 +134,7 @@ void termMain2(int unit){
     //dumpProcesses();
     int status = -1;
 
-    char *buffer = (char *)calloc(MAXLINE, sizeof(char));
+    char *buffer = (char *)calloc(MAXLINE+1, sizeof(char));
     int bufferIndex = 0;
     while (1) {
 
@@ -346,9 +346,9 @@ int ourTermRead(void *args){
     int bufferSize = sysargs->arg2;
     char *buffer = sysargs->arg1;
     int unitID = sysargs->arg3;
-
+    // USLOSS_Console("UNIT: %d\n", unitID);
     // Check for invalid terminal 
-    if(unitID < 0 || unitID > 3) {
+    if(unitID < 0 || unitID > 3 || bufferSize <= 0 ) {
         sysargs->arg4 = -1;
         return -1;
     }
@@ -358,8 +358,9 @@ int ourTermRead(void *args){
     // buffer[bufferSize] = '\0';
     MboxRecv(TERM_MBOX_ARRAY[unitID], buffer, bufferSize);
     //USLOSS_Console("MESSAGE: %s\n", buffer);
+    // USLOSS_Console("STRING: %s\n", buffer);
 
-    sysargs->arg2 = strlen(buffer);
+    sysargs->arg2 = bufferSize;
     sysargs->arg4 = 0;   
     return 0;
 }
