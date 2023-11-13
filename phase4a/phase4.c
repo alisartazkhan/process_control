@@ -45,6 +45,7 @@ int READ_BUFFER_SIZE = -1;
 int ourSleep(void*);
 int ourTermRead(void*);
 int ourTermWrite(void*);
+int ourDiskSize(void *args);
 
 // shadow process struct that keeps track of the sleep time, next proceses 
 // in the queue, and the correponding mutex mailbox ID for blocking
@@ -72,7 +73,9 @@ void phase4_init(void) {
     systemCallVec[SYS_SLEEP] = ourSleep;
     systemCallVec[SYS_TERMREAD] = ourTermRead;
     systemCallVec[SYS_TERMWRITE] = ourTermWrite;
+    systemCallVec[SYS_DISKSIZE] = ourDiskSize;
 }
+
 
 
 
@@ -463,6 +466,35 @@ int ourTermRead(void *args){
 }
 
 
+int ourDiskSize(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    int unit = sysargs->arg1;
+
+    struct USLOSS_DeviceRequest request;
+    request.opr = USLOSS_DISK_TRACKS;
+
+    int numOfTracks;
+    request.reg1 = &numOfTracks;
+
+
+    //void * useReques = (void *) request;
+    USLOSS_DeviceOutput(USLOSS_DISK_DEV,unit, &request);
+
+
+    USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+    
+    USLOSS_Console("size: %d",numOfTracks);
+
+    sysargs->arg1 = 512;
+    sysargs->arg2 = 16;
+    sysargs->arg3 = numOfTracks;
+    sysargs->arg4 = 0;
+
+
+
+    
+    return 0;
+}
 
 
 
