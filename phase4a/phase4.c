@@ -88,12 +88,40 @@ void phase4_init(void) {
 void daemonProcessMain(){
     int status = -1;
     while (1) {
+        // USLOSS_Console("HERE\n");
         waitDevice(USLOSS_CLOCK_DEV, 0, &status);
         GLOBAL_CLOCK_TICKS ++;
         if (GLOBAL_CLOCK_TICKS % 10 == 0 && GLOBAL_CLOCK_TICKS < 4 * 10){
         }
         removeFromPriorityQueue();
     }
+}
+
+
+/*
+    Description: since each terminal can only write one process
+    at a time, we treat it as a mutex, this function gains the lock
+
+    Param: int unit, the terminal to lock
+    Return: None
+
+*/
+void lockTerminal(int unit){
+    MboxSend(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
+}
+
+
+
+/*
+    Description: since each terminal can only write one process
+    at a time, we treat it as a mutex, this function relreases the lock
+
+    Param: int unit, the terminal to unlock
+    Return: None
+
+*/
+void unlockTerminal(int unit){
+    MboxRecv(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
 }
 
 
@@ -108,37 +136,43 @@ void daemonProcessMain(){
     Return: None
 
 */
-void termMain2(int unit){
+void termMain2(int unit) {
     int status = -1;
-    char *buffer = (char *)calloc(MAXLINE, sizeof(char));
+    int sendCount = 0;
+
+    // Statically allocate memory for the buffer
+    char buffer[MAXLINE+1];
     int bufferIndex = 0;
+
     while (1) {
+        waitDevice(USLOSS_TERM_DEV, unit, &status);
+
         int transmitBit = USLOSS_TERM_STAT_XMIT(status);
-        if (transmitBit == USLOSS_DEV_READY){
-            MboxCondSend(TERM_WRITE_MBOX_ARRAY[unit],NULL, 0);
-        } else if (transmitBit == USLOSS_DEV_ERROR){
-            USLOSS_Console("ERROR: theres sth wrong with writing the registers\n");
+        if (transmitBit == USLOSS_DEV_READY) {
+            MboxCondSend(TERM_WRITE_MBOX_ARRAY[unit], NULL, 0);
+        } else if (transmitBit == USLOSS_DEV_ERROR) {
+            USLOSS_Console("ERROR: there's something wrong with writing the registers\n");
             USLOSS_Halt(1);
         }
-        waitDevice(USLOSS_TERM_DEV, unit, &status);
+
         int readBit = USLOSS_TERM_STAT_RECV(status);
-        if (readBit == USLOSS_DEV_BUSY){
+        if (readBit == USLOSS_DEV_BUSY) {
             char character = (char) USLOSS_TERM_STAT_CHAR(status);
             buffer[bufferIndex] = character;
-            bufferIndex ++;
-            if (character == '\n'|| bufferIndex == MAXLINE || bufferIndex == READ_BUFFER_SIZE){
+            bufferIndex++;
+            if (character == '\n' || bufferIndex == MAXLINE || bufferIndex == READ_BUFFER_SIZE) {
                 buffer[bufferIndex] = '\0';
                 MboxCondSend(TERM_READ_MBOX_ARRAY[unit], buffer, bufferIndex);
-                free(buffer);
-                buffer = (char *)calloc(MAXLINE, sizeof(char));
+                // No need to free memory or allocate new memory here
                 bufferIndex = 0;
-            } 
-        } else if (readBit == USLOSS_DEV_ERROR){
-            USLOSS_Console("ERROR: theres sth wrong with reading the registers\n");
+            }
+        } else if (readBit == USLOSS_DEV_ERROR) {
+            USLOSS_Console("ERROR: there's something wrong with reading the registers\n");
             USLOSS_Halt(1);
         }
     }
 }
+
 
 
 /*
@@ -172,7 +206,9 @@ void removeFromPriorityQueue(){
 
 */
 void phase4_start_service_processes(){
+    // int ctrl = 0x7; 
     int ctrl = 0x6; 
+ 
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 0, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 1, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 2, (void*)(long)ctrl) == USLOSS_DEV_OK);
@@ -188,14 +224,16 @@ void phase4_start_service_processes(){
     TERM_LOCK_MBOX_ARRAY[1] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[2] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[3] = MboxCreate(1, 0);
+
     TERM_READ_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
     TERM_READ_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
     TERM_READ_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
     TERM_READ_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
-    TERM_WRITE_MBOX_ARRAY[0] = MboxCreate(10, MAXLINE);
-    TERM_WRITE_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
-    TERM_WRITE_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
-    TERM_WRITE_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
+
+    TERM_WRITE_MBOX_ARRAY[0] = MboxCreate(1, 1);
+    TERM_WRITE_MBOX_ARRAY[1] = MboxCreate(1, 1);
+    TERM_WRITE_MBOX_ARRAY[2] = MboxCreate(1, 1);
+    TERM_WRITE_MBOX_ARRAY[3] = MboxCreate(1, 1);
 }
 
 
@@ -336,31 +374,6 @@ void addToPriorityQueue(int pid){
     }
 }
 
-/*
-    Description: since each terminal can only write one process
-    at a time, we treat it as a mutex, this function gains the lock
-
-    Param: int unit, the terminal to lock
-    Return: None
-
-*/
-void lockTerminal(int unit){
-    MboxSend(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
-}
-
-
-
-/*
-    Description: since each terminal can only write one process
-    at a time, we treat it as a mutex, this function relreases the lock
-
-    Param: int unit, the terminal to unlock
-    Return: None
-
-*/
-void unlockTerminal(int unit){
-    MboxRecv(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
-}
 
 
 
@@ -378,6 +391,7 @@ void writeCharToTerminal(char character, int unit){
     cr_val |= 0x2; 
     cr_val |= 0x4; 
     cr_val |= (character << 8); 
+
     USLOSS_DeviceOutput(USLOSS_TERM_DEV, unit, (void*)(long)cr_val);
 }
 
@@ -398,13 +412,18 @@ int ourTermWrite(void* args){
     int bufferSize = sysargs->arg2;
     int unitID = sysargs->arg3;
     lockTerminal(unitID);
-    for(int i = 0; i < bufferSize; i++) {
-        MboxRecv(TERM_WRITE_MBOX_ARRAY[unitID], NULL, 0); 
-        writeCharToTerminal(buffer[i], unitID); 
+
+    int recvCount = 0;
+
+    for(int i = 0; i < strlen(buffer); i++) {
+        MboxRecv(TERM_WRITE_MBOX_ARRAY[unitID], NULL, 0);
+        writeCharToTerminal(buffer[i], unitID);
     }
+
+    unlockTerminal(unitID);
+
     sysargs->arg4 = 0; 
     sysargs->arg2 = strlen(buffer);
-    unlockTerminal(unitID);
     return 0;
 }
 

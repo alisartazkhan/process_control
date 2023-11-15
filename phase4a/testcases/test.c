@@ -18,59 +18,72 @@
 int Child1(char *arg)
 {
     int term = atoi(arg);
-    char buf[MAXLINE + 1] = "";
-    int result, read_length;
-    int i, size;
+    char buf[MAXLINE] = "";
+    int read_length;
 
     USLOSS_Console("Child%d(): start\n", term);
 
-    for (i = 0; i< 10; i++)
+    int retval = TermRead(buf, MAXLINE, term, &read_length);
+    if (retval < 0)
     {
-        memset(buf, 'x', sizeof(buf));
-
-        int rc = TermRead(buf, MAXLINE, term, &read_length);
-        if (rc < 0)
-        {
-            USLOSS_Console("ERROR: ReadTeam\n");
-            return -1;
-        }
-
-        buf[read_length] = '\0';
-        USLOSS_Console("Child%d(): buffer read from term%d   '%s'\n", term, term, buf);
-
-        result = TermWrite(buf, strlen(buf), term, &size);
-        if (result < 0 || size != strlen(buf))
-        {
-            USLOSS_Console("\n ***** Child(%d): got bad result = %d ", term, result);
-            USLOSS_Console("or bad size = %d! *****\n\n ", size);
-        }
+       USLOSS_Console("ERROR: ReadTerm\n");
+       return -1;
     }
 
-    USLOSS_Console("Child%d(): done\n", term);
+    buf[read_length] = '\0';
+    USLOSS_Console("Child%d(): read '%s'\n", term, buf);
+    return 0;
+}
+
+
+int Child2(char *arg)
+{
+    char buffer[MAXLINE];
+    int  result, size;
+    int  unit = atoi(arg);
+
+    sprintf(buffer, "Child %d: A Something interesting to print here...\n", unit);
+
+    result = TermWrite(buffer, strlen(buffer), unit, &size);
+    if (result < 0 || size != strlen(buffer)) {
+        USLOSS_Console("\n ***** Child(%d): got bad result or bad size! *****\n\n ", unit);
+        USLOSS_Console("result = %d size = %d and bufferlength = %d\n", result, size, strlen(buffer));
+    }
+
     Terminate(0);
+    USLOSS_Console("Child(%d): should not see this message!\n", unit);
 }
 
 
 
-extern int testcase_timeout;   // defined in the testcase common code
-
 int start4(char *arg)
 {
-    int  pid, status;
-    char buf[12];
+    int  pid, status, i;
+    char buf[4][12];
     char child_buf[12];
 
-    testcase_timeout = 60;
+    USLOSS_Console("start4(): Spawn four children.  Each child reads fm a different\n");
+    USLOSS_Console("          terminal.  The child reading the shortest line will\n");
+    USLOSS_Console("          finish first, etc.\n");
+    USLOSS_Console("start4(): Spawn four children.  Each child writes to a different\n");
+    USLOSS_Console("          terminal.\n");
 
-    USLOSS_Console("start4(): Spawn one child.\n");
+    for (i = 0; i < 4; i++) {
+        sprintf(buf[i], "%d", i);
 
-    sprintf(buf, "%d", 0);
-    sprintf(child_buf, "Child%d", 0);
-    status = Spawn(child_buf, Child1, buf, USLOSS_MIN_STACK,2, &pid);
-    assert(status == 0);
+        sprintf(child_buf, "Child%d", i);
+        status = Spawn(child_buf, Child1, buf[i], USLOSS_MIN_STACK,2, &pid);
+        assert(status == 0);
 
-    Wait(&pid, &status);
-    assert(status == 0);
+        sprintf(child_buf, "Child%d", i+4);
+        status = Spawn(child_buf, Child2, buf[i], USLOSS_MIN_STACK,2, &pid);
+        assert(status == 0);
+    }
+
+    for (i = 0; i < 8; i++) {
+        Wait(&pid, &status);
+        assert(status == 0);
+    }
 
     USLOSS_Console("start4(): done.\n");
     Terminate(0);
