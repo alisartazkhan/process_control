@@ -474,9 +474,11 @@ int ourTermRead(void *args){
         sysargs->arg4 = -1;
         return -1;
     }
-    memset(buffer, '\0', 256);
-    MboxRecv(TERM_READ_MBOX_ARRAY[unitID], buffer, bufferSize);
-    sysargs->arg2 = strlen(buffer);
+    memset(buffer, '\0', bufferSize);
+   int size =  MboxRecv(TERM_READ_MBOX_ARRAY[unitID], buffer, bufferSize);
+
+    // USLOSS_Console("BUFFER: %s\n", buffer);
+    sysargs->arg2 = size;
     sysargs->arg4 = 0;   
     return 0;
 }
