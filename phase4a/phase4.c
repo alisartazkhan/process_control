@@ -41,6 +41,7 @@ int TERM_READ_MBOX_ARRAY[4];
 int TERM_WRITE_MBOX_ARRAY[4];
 int READ_BUFFER_SIZE = -1;
 
+int DISK_SIZE_MBOX_ARRAY[2];
 
 int ourSleep(void*);
 int ourTermRead(void*);
@@ -99,6 +100,21 @@ void daemonProcessMain(){
     }
 }
 
+void diskDaemon(unit){
+
+    int status;
+    USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+    while (1){
+        if (status == USLOSS_DEV_READY) {
+            //USLOSS_Console("daemon\n");
+            MboxRecv(DISK_SIZE_MBOX_ARRAY[unit],NULL,NULL);
+
+        } else {
+            //USLOSS_Console("not daemon\n");
+
+        }
+    }
+}
 
 /*
     Description: The terminal daemon function that handles reading and writing
@@ -185,8 +201,10 @@ void phase4_start_service_processes(){
     DAEMON_TERMINAL1_PID = fork1("TERM1", termMain2, 1, USLOSS_MIN_STACK, 1);
     DAEMON_TERMINAL2_PID = fork1("TERM2", termMain2, 2, USLOSS_MIN_STACK, 1);
     DAEMON_TERMINAL3_PID = fork1("TERM3", termMain2, 3, USLOSS_MIN_STACK, 1);
-    DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
-    DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
+    DAEMON_DISK0_PID = fork1("DISK", diskDaemon, 0, USLOSS_MIN_STACK, 1);
+    DAEMON_DISK1_PID = fork1("DISK", diskDaemon, 1, USLOSS_MIN_STACK, 1);
+    //DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
+   // DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
     TERM_LOCK_MBOX_ARRAY[0] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[1] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[2] = MboxCreate(1, 0);
@@ -199,6 +217,10 @@ void phase4_start_service_processes(){
     TERM_WRITE_MBOX_ARRAY[1] = MboxCreate(10, MAXLINE);
     TERM_WRITE_MBOX_ARRAY[2] = MboxCreate(10, MAXLINE);
     TERM_WRITE_MBOX_ARRAY[3] = MboxCreate(10, MAXLINE);
+
+    DISK_SIZE_MBOX_ARRAY[0] = MboxCreate(0,0);
+    DISK_SIZE_MBOX_ARRAY[1] = MboxCreate(0,0);
+
 }
 
 
@@ -479,11 +501,20 @@ int ourDiskSize(void *args){
 
     //void * useReques = (void *) request;
     USLOSS_DeviceOutput(USLOSS_DISK_DEV,unit, &request);
+    //USLOSS_Console("about to block\n");
+    MboxSend(DISK_SIZE_MBOX_ARRAY[unit],NULL,NULL);
 
 
-    USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+     int status;
+    // USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+
+    // if (status == USLOSS_DEV_READY) {
+    //     USLOSS_Console("ready\n");
+    // } else {
+    //     USLOSS_Console("not ready\n");
+    // }
     
-    USLOSS_Console("size: %d",numOfTracks);
+    //USLOSS_Console("size: %d",numOfTracks);
 
     sysargs->arg1 = 512;
     sysargs->arg2 = 16;
