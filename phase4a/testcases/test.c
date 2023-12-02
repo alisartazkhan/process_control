@@ -1,9 +1,4 @@
-/* TERMTEST
- * Read exactly 13 bytes from term 1. Display the bytes to stdout.
- */
-
 #include <stdio.h>
-#include <string.h>
 
 #include <usloss.h>
 #include <usyscall.h>
@@ -15,37 +10,34 @@
 #include <phase4.h>
 #include <phase4_usermode.h>
 
-char buf[256];
 
 
+/* Queries each of disk0 and disk1 to get the sector size, track size,
+ * and disk size.
+ */
 
 int start4(char *arg)
 {
-    int j, length;
-    char dataBuffer[256];
-    int result;
-  
-    USLOSS_Console("start4(): Read from terminal 1, but ask for fewer chars than are present on the first line.\n");
+    int unit, sectorSize, trackSize, diskSize;
 
-    length = 0;
-    memset(dataBuffer, 'a', 256);  // Fill dataBuffer with a's
-    dataBuffer[254] = '\n';
-    dataBuffer[255] = '\0';
+    USLOSS_Console("start4(): started\n");
 
-    result = TermRead(dataBuffer, 13, 1, &length);
-    if (result < 0)
-    {
-        USLOSS_Console("start4(): ERROR from Readterm, result = %d\n", result);
-        Terminate(1);
-    }	
+    unit = 0;
+    DiskSize(unit, &sectorSize, &trackSize, &diskSize);
 
-    USLOSS_Console("start4(): term1 read %d bytes, first 13 bytes: '", length);
-    USLOSS_Console(buf);
-    for (j = 0; j < 13; j++)
-        USLOSS_Console("%c", dataBuffer[j]);	    
-    USLOSS_Console("'\n");
-  
-    USLOSS_Console("start4(): simple terminal test is done.\n");
+    USLOSS_Console("start4(): unit %d, sector size %d, track size %d, ", unit, sectorSize, trackSize);
+    USLOSS_Console("disk size %d\n", diskSize);
+
+    unit = 1;
+    DiskSize(unit, &sectorSize, &trackSize, &diskSize);
+
+    USLOSS_Console("start4(): unit %d, sector size %d, track size %d, ", unit, sectorSize, trackSize);
+    USLOSS_Console("disk size %d\n", diskSize);
+
+    USLOSS_Console("start4(): calling Terminate\n");
     Terminate(0);
+
+    USLOSS_Console("start4(): should not see this message!\n");
+    return 0;    // so that gcc won't complain
 }
 

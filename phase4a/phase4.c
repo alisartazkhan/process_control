@@ -41,10 +41,12 @@ int TERM_READ_MBOX_ARRAY[4];
 int TERM_WRITE_MBOX_ARRAY[4];
 int READ_BUFFER_SIZE = -1;
 
+int DISK_SIZE_MBOX_ARRAY[2];
 
 int ourSleep(void*);
 int ourTermRead(void*);
 int ourTermWrite(void*);
+int ourDiskSize(void *args);
 
 // shadow process struct that keeps track of the sleep time, next proceses 
 // in the queue, and the correponding mutex mailbox ID for blocking
@@ -72,7 +74,9 @@ void phase4_init(void) {
     systemCallVec[SYS_SLEEP] = ourSleep;
     systemCallVec[SYS_TERMREAD] = ourTermRead;
     systemCallVec[SYS_TERMWRITE] = ourTermWrite;
+    systemCallVec[SYS_DISKSIZE] = ourDiskSize;
 }
+
 
 
 
@@ -123,6 +127,7 @@ void lockTerminal(int unit){
 void unlockTerminal(int unit){
     MboxRecv(TERM_LOCK_MBOX_ARRAY[unit], NULL, NULL);
 }
+
 
 
 /*
@@ -218,8 +223,10 @@ void phase4_start_service_processes(){
     DAEMON_TERMINAL1_PID = fork1("TERM1", termMain2, 1, USLOSS_MIN_STACK, 1);
     DAEMON_TERMINAL2_PID = fork1("TERM2", termMain2, 2, USLOSS_MIN_STACK, 1);
     DAEMON_TERMINAL3_PID = fork1("TERM3", termMain2, 3, USLOSS_MIN_STACK, 1);
-    DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
-    DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
+    DAEMON_DISK0_PID = fork1("DISK", diskDaemon, 0, USLOSS_MIN_STACK, 1);
+    DAEMON_DISK1_PID = fork1("DISK", diskDaemon, 1, USLOSS_MIN_STACK, 1);
+    //DAEMON_DISK0_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
+   // DAEMON_DISK1_PID = fork1("DISK", NULL, NULL, USLOSS_MIN_STACK, 1);
     TERM_LOCK_MBOX_ARRAY[0] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[1] = MboxCreate(1, 0);
     TERM_LOCK_MBOX_ARRAY[2] = MboxCreate(1, 0);
@@ -234,6 +241,10 @@ void phase4_start_service_processes(){
     TERM_WRITE_MBOX_ARRAY[1] = MboxCreate(1, 1);
     TERM_WRITE_MBOX_ARRAY[2] = MboxCreate(1, 1);
     TERM_WRITE_MBOX_ARRAY[3] = MboxCreate(1, 1);
+
+    DISK_SIZE_MBOX_ARRAY[0] = MboxCreate(0,0);
+    DISK_SIZE_MBOX_ARRAY[1] = MboxCreate(0,0);
+
 }
 
 
@@ -484,6 +495,64 @@ int ourTermRead(void *args){
 }
 
 
+void diskDaemon(unit){
+
+    int status;
+    USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+    while (1){
+        if (status == USLOSS_DEV_READY) {
+            //USLOSS_Console("daemon\n");
+
+            USLOSS_Console("opr: %d \n",status.opr);
+
+            MboxRecv(DISK_SIZE_MBOX_ARRAY[unit],NULL,NULL);
+
+        } else {
+            //USLOSS_Console("not daemon\n");
+
+        }
+    }
+}
+
+
+int ourDiskSize(void *args){
+    USLOSS_Sysargs *sysargs = args; 
+    int unit = sysargs->arg1;
+
+    struct USLOSS_DeviceRequest request;
+    request.opr = USLOSS_DISK_TRACKS;
+
+    int numOfTracks;
+    request.reg1 = &numOfTracks;
+
+
+    //void * useReques = (void *) request;
+    USLOSS_DeviceOutput(USLOSS_DISK_DEV,unit, &request);
+    //USLOSS_Console("about to block\n");
+    MboxSend(DISK_SIZE_MBOX_ARRAY[unit],NULL,NULL);
+
+
+     int status;
+    // USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+
+    // if (status == USLOSS_DEV_READY) {
+    //     USLOSS_Console("ready\n");
+    // } else {
+    //     USLOSS_Console("not ready\n");
+    // }
+    
+    //USLOSS_Console("size: %d",numOfTracks);
+
+    sysargs->arg1 = 512;
+    sysargs->arg2 = 16;
+    sysargs->arg3 = numOfTracks;
+    sysargs->arg4 = 0;
+
+
+
+    
+    return 0;
+}
 
 
 
