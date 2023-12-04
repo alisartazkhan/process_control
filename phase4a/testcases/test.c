@@ -1,4 +1,13 @@
+/*  DISKTEST
+    - note that the test script should clean out the disk file
+    each time before running this test.
+    Write three sectors to the disk and then read them back.
+    Do not span track boundaries. 
+*/
+
 #include <stdio.h>
+#include <string.h>
+#include <assert.h>
 
 #include <usloss.h>
 #include <usyscall.h>
@@ -10,34 +19,49 @@
 #include <phase4.h>
 #include <phase4_usermode.h>
 
+char sectors[3 * 512];
+char copy[3 * 512];
 
 
-/* Queries each of disk0 and disk1 to get the sector size, track size,
- * and disk size.
- */
 
 int start4(char *arg)
 {
-    int unit, sectorSize, trackSize, diskSize;
+    int result;
+    int status;
 
-    USLOSS_Console("start4(): started\n");
+    USLOSS_Console("start4(): Testing disk 0\n");
+    strcpy(&sectors[0 * 512], "This is a test");
+    strcpy(&sectors[1 * 512], "Does it work?");
+    strcpy(&sectors[2 * 512], "One last chance");
+    result = DiskWrite((char *) sectors, 0, 4, 2, 3, &status);
+    assert(result == 0);
+    assert(status == 0);
 
-    unit = 0;
-    DiskSize(unit, &sectorSize, &trackSize, &diskSize);
+    result = DiskRead((char *) copy, 0, 4, 2, 3, &status);
+    assert(result == 0);
+    assert(status == 0);
 
-    USLOSS_Console("start4(): unit %d, sector size %d, track size %d, ", unit, sectorSize, trackSize);
-    USLOSS_Console("disk size %d\n", diskSize);
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[0*512]);
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[1*512]);
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[2*512]);
 
-    unit = 1;
-    DiskSize(unit, &sectorSize, &trackSize, &diskSize);
+    USLOSS_Console("start4(): Testing disk 1\n");
+    strcpy(&sectors[0 * 512], "This is a test");
+    strcpy(&sectors[1 * 512], "Does it work?");
+    strcpy(&sectors[2 * 512], "One last chance");
+    result = DiskWrite((char *) sectors, 1, 4, 2, 3, &status);
+    assert(result == 0);
+    assert(status == 0);
 
-    USLOSS_Console("start4(): unit %d, sector size %d, track size %d, ", unit, sectorSize, trackSize);
-    USLOSS_Console("disk size %d\n", diskSize);
+    result = DiskRead((char *) copy, 1, 4, 2, 3, &status);
+    assert(result == 0);
+    assert(status == 0);
 
-    USLOSS_Console("start4(): calling Terminate\n");
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[0*512]);
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[1*512]);
+    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[2*512]);
+
+    USLOSS_Console("start4(): Terminating\n");
     Terminate(0);
-
-    USLOSS_Console("start4(): should not see this message!\n");
-    return 0;    // so that gcc won't complain
 }
 
