@@ -1,13 +1,10 @@
-/*  DISKTEST
-    - note that the test script should clean out the disk file
-    each time before running this test.
-    Write three sectors to the disk and then read them back.
-    Do not span track boundaries. 
-*/
+/*
+ * Test Invalid disk and Terminal.
+ */
 
-#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <assert.h>
+#include <stdio.h>
 
 #include <usloss.h>
 #include <usyscall.h>
@@ -19,49 +16,34 @@
 #include <phase4.h>
 #include <phase4_usermode.h>
 
-char sectors[3 * 512];
-char copy[3 * 512];
-
 
 
 int start4(char *arg)
 {
-    int result;
-    int status;
+    int  status;
+    char buffer[80];
 
-    USLOSS_Console("start4(): Testing disk 0\n");
-    strcpy(&sectors[0 * 512], "This is a test");
-    strcpy(&sectors[1 * 512], "Does it work?");
-    strcpy(&sectors[2 * 512], "One last chance");
-    result = DiskWrite((char *) sectors, 0, 4, 2, 3, &status);
-    assert(result == 0);
-    assert(status == 0);
+    USLOSS_Console("start4(): Attempting some invalid writes.  If they are all rejected (as expected), then you will not see anything more before 'done'\n");
 
-    result = DiskRead((char *) copy, 0, 4, 2, 3, &status);
-    assert(result == 0);
-    assert(status == 0);
+    if (DiskWrite(buffer, 3, 1, 1, 1, &status) != -1)
+        USLOSS_Console("start4(): Disk : An invalid call was made, but DiskWrite() returned something other than -1   (unit 3 is invalid)\n");
+    USLOSS_Console("1\n");
+    if (DiskWrite(buffer, 0, 1, 17, 1, &status) != -1)
+        USLOSS_Console("start4(): Disk : An invalid call was made, but DiskWrite() returned something other than -1   (startSector is invalid)\n");
+    USLOSS_Console("2\n");
 
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[0*512]);
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[1*512]);
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[2*512]);
+    /* unlike the others (invalid arguments), this should have an OK return value
+     * (the I/O was attempted), but a bad status (it didn't work)
+     */
+    if (DiskWrite(buffer, 0, 1776, 1, 1, &status) != 0)
+        USLOSS_Console("start4(): Disk : An invalid call was made, but DiskWrite() returned something other than 0   (track seems plausible, but is too high)\n");
+    USLOSS_Console("3\n");
 
-    USLOSS_Console("start4(): Testing disk 1\n");
-    strcpy(&sectors[0 * 512], "This is a test");
-    strcpy(&sectors[1 * 512], "Does it work?");
-    strcpy(&sectors[2 * 512], "One last chance");
-    result = DiskWrite((char *) sectors, 1, 4, 2, 3, &status);
-    assert(result == 0);
-    assert(status == 0);
+    if (status != USLOSS_DEV_ERROR)
+        USLOSS_Console("start4(): Disk : An invalid call was made, but DiskWrite() the status was something other than USLOSS_DEV_ERR   (track seems plausible, but is too high)\n");
+    USLOSS_Console("4\n");
 
-    result = DiskRead((char *) copy, 1, 4, 2, 3, &status);
-    assert(result == 0);
-    assert(status == 0);
-
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[0*512]);
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[1*512]);
-    USLOSS_Console("start4(): Read from disk: '%s'\n", &copy[2*512]);
-
-    USLOSS_Console("start4(): Terminating\n");
+    USLOSS_Console("start4(): done\n");
     Terminate(0);
 }
 

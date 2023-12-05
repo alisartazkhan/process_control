@@ -111,7 +111,7 @@ void phase4_init(void) {
 void daemonProcessMain(){
     int status = -1;
     while (1) {
-        // USLOSS_Console("HERE\n");
+        // //USLOSS_Console("HERE\n");
         waitDevice(USLOSS_CLOCK_DEV, 0, &status);
         GLOBAL_CLOCK_TICKS ++;
         if (GLOBAL_CLOCK_TICKS % 10 == 0 && GLOBAL_CLOCK_TICKS < 4 * 10){
@@ -175,7 +175,7 @@ void termMain2(int unit) {
         if (transmitBit == USLOSS_DEV_READY) {
             MboxCondSend(TERM_WRITE_MBOX_ARRAY[unit], NULL, 0);
         } else if (transmitBit == USLOSS_DEV_ERROR) {
-            USLOSS_Console("ERROR: there's something wrong with writing the registers\n");
+            //USLOSS_Console("ERROR: there's something wrong with writing the registers\n");
             USLOSS_Halt(1);
         }
 
@@ -191,7 +191,7 @@ void termMain2(int unit) {
                 bufferIndex = 0;
             }
         } else if (readBit == USLOSS_DEV_ERROR) {
-            USLOSS_Console("ERROR: there's something wrong with reading the registers\n");
+            //USLOSS_Console("ERROR: there's something wrong with reading the registers\n");
             USLOSS_Halt(1);
         }
     }
@@ -232,7 +232,8 @@ void removeFromPriorityQueue(){
 void phase4_start_service_processes(){
     // int ctrl = 0x7; 
     int ctrl = 0x6; 
- 
+        //USLOSS_Console("TESt in start processes\n");
+
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 0, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 1, (void*)(long)ctrl) == USLOSS_DEV_OK);
     assert( USLOSS_DeviceOutput(USLOSS_TERM_DEV, 2, (void*)(long)ctrl) == USLOSS_DEV_OK);
@@ -286,7 +287,7 @@ void phase4_start_service_processes(){
 
 */
 void printProc(struct Process * cur){
-    USLOSS_Console("[PID: %d | MBOXID: %d | ENDSLEEP %d] -->",cur->PID, cur->mboxID, cur->endSleep);
+    //USLOSS_Console("[PID: %d | MBOXID: %d | ENDSLEEP %d] -->",cur->PID, cur->mboxID, cur->endSleep);
 }
 
 
@@ -299,12 +300,12 @@ void printProc(struct Process * cur){
 */
 int dumpPriorityQueue(){
     struct Process * cur = priorityQueueHead;
-    USLOSS_Console("\nDUMPING PQueue -------------\n\n");
+    //USLOSS_Console("\nDUMPING PQueue -------------\n\n");
     while (cur != NULL){
         printProc(cur);
         cur = cur->next;
     }
-    USLOSS_Console("\n\nEnding PQueue ------------\n\n");
+    //USLOSS_Console("\n\nEnding PQueue ------------\n\n");
 
 }
 
@@ -317,15 +318,15 @@ int dumpPriorityQueue(){
 
 */
 void dumpSP(void){
-    USLOSS_Console("\nDUMPING SHADOW PROCTABLE ---------------------------\n\n");
+    //USLOSS_Console("\nDUMPING SHADOW PROCTABLE ---------------------------\n\n");
     for (int i = 0; i < MAXPROC; i++){
         if ( shadowProcessTable[i].PID == 0){
             continue;
         }
         printProc(&shadowProcessTable[i]);
-        USLOSS_Console("\n");
+        //USLOSS_Console("\n");
     }
-    USLOSS_Console("\nEND OF DUMP PROC -----------------------\n\n");
+    //USLOSS_Console("\nEND OF DUMP PROC -----------------------\n\n");
 
 }
 
@@ -518,7 +519,7 @@ int ourTermRead(void *args){
     memset(buffer, '\0', bufferSize);
    int size =  MboxRecv(TERM_READ_MBOX_ARRAY[unitID], buffer, bufferSize);
 
-    // USLOSS_Console("BUFFER: %s\n", buffer);
+    // //USLOSS_Console("BUFFER: %s\n", buffer);
     sysargs->arg2 = size;
     sysargs->arg4 = 0;   
     return 0;
@@ -526,38 +527,56 @@ int ourTermRead(void *args){
 
 
 void diskDaemon(int unit){
-
+    //USLOSS_Console("TEST in s\n");
+    assert(unit == 0 || unit == 1);
     int status;
     while (1){
-        USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
+        waitDevice(USLOSS_DISK_DEV, unit, &status);
+        //USLOSS_Console("After device input()\n");
+        // assert(status == USLOSS_DEV_ERROR);
         if (status == USLOSS_DEV_READY) {
-            //USLOSS_Console("daemon\n");
+            USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
 
-            //USLOSS_Console("opr: %d \n",status.opr);
-
+            //USLOSS_Console("operation is done\n");
             disks[unit].status = status;
             disks[unit].isComplete = 1;
-            MboxSend(DISK_MBOX_ARRAY[unit], NULL, 0);
-        } else {
-            //USLOSS_Console("not daemon\n");
+            MboxCondSend(DISK_MBOX_ARRAY[unit], NULL, 0);
+        } else if (status == USLOSS_DEV_ERROR) {
+            // USLOSS_Console("ERROR in daemon\n");
+            disks[unit].status = USLOSS_DEV_ERROR;
+            MboxCondSend(DISK_MBOX_ARRAY[unit], NULL, 0);
 
-        }
+        
+        } 
     }
 }
 
 
 // Seek disk head to track
-void Seek(int unit, int track) {
+int Seek(int unit, int track) {
     if (DISK_TRACK[unit] == track){
         return;
     }
 
     USLOSS_DeviceRequest req;
     req.opr = USLOSS_DISK_SEEK;
-    req.reg1 = (void*)(long)track; 
+    req.reg1 = track; 
     req.reg2 = NULL;
 
     USLOSS_DeviceOutput(USLOSS_DISK_DEV, unit, &req);
+
+    MboxRecv(DISK_MBOX_ARRAY[unit], NULL, 0);
+
+    if (disks[unit].status == USLOSS_DEV_ERROR){
+        return USLOSS_DEV_ERROR;
+    }
+
+    return 111;
+
+
+
+
+    
 }
 
 void lockDisk(int unit){
@@ -575,7 +594,14 @@ int ourDiskRead(void *args){
     int startingTrackNumber = ( (long) sysargs->arg3);
     int firstSector = ( (long) sysargs->arg4);
     int unit =  ( (long) sysargs->arg5);
+    //USLOSS_Console("TEST in read\n");
 
+    if ((unit != 1 && unit != 0) || firstSector < 0 || firstSector > 15){
+        sysargs->arg4 = -1;
+        return -1;
+    }
+
+    assert(unit == 0 || unit ==1);
     lockDisk(unit);
 
     int curSector = firstSector;
@@ -584,17 +610,26 @@ int ourDiskRead(void *args){
     int status;
     
     for (int i = 0; i < numOfSectors; i++){
-        Seek(unit, curTrack);
+        int resultSeek = Seek(unit, curTrack);
+        if (resultSeek == USLOSS_DEV_ERROR){
+            sysargs->arg1 = USLOSS_DEV_ERROR;
+            sysargs->arg4 = 0;
+            return;
+
+        }
+
 
         struct USLOSS_DeviceRequest *request = &disks[unit].request;
 
         request->opr = USLOSS_DISK_READ;
-        request->reg1 = curSector;
+        request->reg1 =  (void*)(long) curSector;
         request->reg2 = diskBuffer;
 
         USLOSS_DeviceOutput(USLOSS_DISK_DEV, unit, request);
 
         MboxRecv(DISK_MBOX_ARRAY[unit], NULL, 0);
+
+        //USLOSS_Console("back to read\n");
         assert(disks[unit].isComplete == 1);
         disks[unit].isComplete = 0;
 
@@ -602,7 +637,7 @@ int ourDiskRead(void *args){
         
         // ASSUMUNG TRACK INDEXED AT 1
         if (curSector == 15){
-            curSector = 0;
+            curSector = -1;
             curTrack ++;
         }
         curSector++;
@@ -620,13 +655,20 @@ int ourDiskRead(void *args){
 }
 
 int ourDiskWrite(void *args){
-    USLOSS_Console("jere\n");
+    // USLOSS_Console("jere\n");
     USLOSS_Sysargs *sysargs = args; 
     char * diskBuffer = (char*) sysargs->arg1;
     int numOfSectors = ( (long) sysargs->arg2);
     int startingTrackNumber = ( (long) sysargs->arg3);
     int firstSector = ( (long) sysargs->arg4);
     int unit =  ( (long) sysargs->arg5);
+
+    if ((unit != 1 && unit != 0) || firstSector < 0 || firstSector > 15){
+        sysargs->arg4 = -1;
+        sysargs->arg1 = USLOSS_DEV_ERROR;
+        return -1;
+    }
+    assert(unit == 0 || unit ==1);
 
     lockDisk(unit);
 
@@ -637,24 +679,33 @@ int ourDiskWrite(void *args){
     int status;
     
     for (int i = 0; i < numOfSectors; i++){
-        Seek(unit, curTrack);
+        int resultSeek = Seek(unit, curTrack);
+        if (resultSeek == USLOSS_DEV_ERROR){
+            sysargs->arg1 = USLOSS_DEV_ERROR;
+            sysargs->arg4 = 0;
+            return;
+
+        }
 
         struct USLOSS_DeviceRequest *request = &disks[unit].request;
 
-        request->opr = USLOSS_DISK_READ;
-        request->reg1 = curSector;
+        request->opr = USLOSS_DISK_WRITE;
+        request->reg1 =  (void*)(long) curSector;
         request->reg2 = diskBuffer;
 
         USLOSS_DeviceOutput(USLOSS_DISK_DEV, unit, request);
 
         MboxRecv(DISK_MBOX_ARRAY[unit], NULL, 0);
+
+        //USLOSS_Console("back to write\n");
+
         disks[unit].isComplete = 0;
 
         status = disks[unit].status;
         
         // ASSUMUNG TRACK INDEXED AT 1
         if (curSector == 15){
-            curSector = 0;
+            curSector = -1;
             curTrack ++;
         }
         curSector++;
@@ -675,7 +726,7 @@ int ourDiskWrite(void *args){
 int ourDiskSize(void *args){
     USLOSS_Sysargs *sysargs = args; 
     int unit = sysargs->arg1;
-
+    //USLOSS_Console("In disksize\n");
     //Seek(unit, 16);
 
     struct USLOSS_DeviceRequest request;
@@ -687,20 +738,20 @@ int ourDiskSize(void *args){
 
     //void * useReques = (void *) request;
     USLOSS_DeviceOutput(USLOSS_DISK_DEV,unit, &request);
-    //USLOSS_Console("about to block\n");
+    ////USLOSS_Console("about to block\n");
     MboxRecv(DISK_MBOX_ARRAY[unit],NULL,NULL);
 
 
-     int status;
+    int status;
     // USLOSS_DeviceInput(USLOSS_DISK_DEV, unit, &status);
 
     // if (status == USLOSS_DEV_READY) {
-    //     USLOSS_Console("ready\n");
+    //     //USLOSS_Console("ready\n");
     // } else {
-    //     USLOSS_Console("not ready\n");
+    //     //USLOSS_Console("not ready\n");
     // }
     
-    //USLOSS_Console("size: %d",numOfTracks);
+    ////USLOSS_Console("size: %d",numOfTracks);
 
     sysargs->arg1 = 512;
     sysargs->arg2 = 16;
